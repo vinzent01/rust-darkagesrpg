@@ -8,7 +8,7 @@ use crate::input;
 use crate::inventory;
 use crate::menu::{self, Menu};
 use crate::movement;
-use crate::objects::{self, TreeSounds};
+use crate::objects::{self, GameSounds};
 use crate::render;
 use crate::spawner;
 use crate::utils;
@@ -29,7 +29,7 @@ pub fn update(
     zoom: &mut f32,
     turn_phase: &mut TurnPhase,
     menu: &mut Menu,
-    tree_sounds: &TreeSounds,
+    game_sounds: &GameSounds,
     dt: f32,
 ) {
     menu::update(menu);
@@ -73,8 +73,8 @@ pub fn update(
         return;
     }
 
-    movement::bezier_movement(world, dt);
-    movement::advance_attack_actions(world, database, Some(tree_sounds));
+    movement::bezier_movement(world, dt, &game_sounds.footstep);
+    movement::advance_attack_actions(world, database, Some(game_sounds));
     movement::flip_system(world);
     movement::camera_follow(world, camera);
 

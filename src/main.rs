@@ -35,9 +35,9 @@ async fn main() {
         render::create_outline_material().expect("failed to create outline material");
 
     database.load().await;
-    let tree_sounds = objects::load_tree_sounds()
+    let game_sounds = objects::load_game_sounds()
         .await
-        .expect("failed to load tree sounds");
+        .expect("failed to load game sounds");
     let mut camera = game::create_camera(zoom);
     let mut window = WindowState {
         width: screen_width(),
@@ -63,7 +63,7 @@ async fn main() {
             &mut zoom,
             &mut turn_phase,
             &mut menu,
-            &tree_sounds,
+            &game_sounds,
             dt,
         );
 

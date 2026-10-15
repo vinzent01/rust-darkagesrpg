@@ -23,7 +23,7 @@ pub fn attack_input(world: &World, database: &Database, camera: &Camera2D) -> Op
 
     let target_entity = attack_target_at_cursor(world, database, camera)?;
     if let Ok(tree) = world.get::<&Tree>(target_entity) {
-        if tree.felled || tree.fall.is_some() || !player_has_stone_axe(world) {
+        if !tree.can_be_attacked(player_has_stone_axe(world)) {
             return None;
         }
     }

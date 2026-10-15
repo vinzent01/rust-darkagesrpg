@@ -1,11 +1,12 @@
 use hecs::{Entity, World};
+use macroquad::audio::Sound;
 use macroquad::prelude::*;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::body::Appearence;
 use crate::health::{Health, MELEE_DAMAGE};
 use crate::database::Database;
-use crate::objects::{self, Solid, Tree, TreeSounds};
+use crate::objects::{self, GameSounds, Solid, Tree};
 use crate::player::Player;
 use crate::tilemap::{MAP_HEIGHT, MAP_WIDTH};
 use crate::utils::{self, TILE_SIZE};
@@ -88,7 +89,7 @@ pub fn start_attack(world: &World, target_entity: Entity, target: Vec2) -> bool 
 pub fn advance_attack_actions(
     world: &mut World,
     database: &Database,
-    sounds: Option<&TreeSounds>,
+    sounds: Option<&GameSounds>,
 ) {
     let mut targets_hit = Vec::new();
     {
@@ -126,7 +127,14 @@ pub fn advance_attack_actions(
 
     for (target, player_position) in targets_hit {
         if world.get::<&Tree>(target).is_ok() {
-            objects::finish_tree_felling(world, database, sounds, target, player_position);
+            let is_stump = world
+                .get::<&Tree>(target)
+                .is_ok_and(|tree| tree.felled);
+            if is_stump {
+                objects::remove_tree_stump(world, database, sounds, target);
+            } else {
+                objects::finish_tree_felling(world, database, sounds, target, player_position);
+            }
         } else {
             let defeated = world
                 .get::<&mut Health>(target)
@@ -302,12 +310,17 @@ pub fn entities_are_moving(world: &World) -> bool {
 }
 
 
-pub fn bezier_movement(world: &World, dt : f32) {
-    for ( bezier, pos) in world.query::<(&mut BezierMovement, &mut Position)>().iter() {
+pub fn bezier_movement(world: &World, dt: f32, footstep_sound: &Sound) {
+    let mut player_step_started = false;
+    for (entity, bezier, pos) in world
+        .query::<(Entity, &mut BezierMovement, &mut Position)>()
+        .iter()
+    {
         if bezier.has_started == false{
             continue;
         }
 
+        player_step_started |= bezier.t == 0.0 && world.get::<&Player>(entity).is_ok();
         bezier.t += dt * bezier.speed;
 
         let movement = utils::bezier(bezier.p0, bezier.p1, bezier.p2, bezier.t);
@@ -320,6 +333,9 @@ pub fn bezier_movement(world: &World, dt : f32) {
 
             pos.value = bezier.p2;
         }
+    }
+    if player_step_started {
+        macroquad::audio::play_sound_once(footstep_sound);
     }
 }
 

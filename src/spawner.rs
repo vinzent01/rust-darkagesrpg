@@ -3,23 +3,13 @@ use macroquad::{color, prelude::*};
 
 use crate::body::Sprite;
 use crate::database::Database;
-use crate::health::{Health, MAX_HEALTH};
+use crate::health::Health;
 use crate::movement::{AttackAction, BezierMovement, Position, RandomWalker, MOVEMENT_SPEED};
 use crate::player::Player;
 use crate::tilemap::{MAP_HEIGHT, MAP_WIDTH};
 use crate::utils::{cell_to_world, TILE_SIZE};
 
 const CREATURE_SPAWN_INTERVAL_TURNS: u32 = 10;
-const CREATURE_TEXTURES: [&str; 7] = [
-    "./content/creatures/bear.png",
-    "./content/creatures/deer.png",
-    "./content/creatures/griffon.png",
-    "./content/creatures/rabbit.png",
-    "./content/creatures/white-horse.png",
-    "./content/creatures/horse.png",
-    "./content/creatures/wolf.png",
-];
-const CREATURE_SPAWN_WEIGHTS: [u32; 7] = [2, 6, 1, 8, 6, 6, 8];
 const CAMERA_SPAWN_MARGIN: f32 = TILE_SIZE * 4.0;
 
 pub struct CreatureSpawner {
@@ -34,14 +24,17 @@ pub fn spawn_creature_spawner(world: &mut World) {
 
 pub fn spawn_random_creatures(world: &mut World, database: &Database, camera: &Camera2D) {
     let mut available_cells = available_creature_spawn_cells(world, camera);
-    for _ in 0..CREATURE_TEXTURES.len() {
+    for _ in 0..database.creatures.len() {
         if available_cells.is_empty() {
             break;
         }
 
         let cell_index = macroquad::rand::gen_range(0, available_cells.len() as i32) as usize;
         let cell = available_cells.swap_remove(cell_index);
-        spawn_creature_at(world, database, random_creature_texture(), cell);
+        let creature_id = random_creature_id(database);
+        let position = cell_to_world(cell.x as i32, cell.y as i32);
+        spawn_creature(world, database, creature_id, position, vec2(0.0, -32.0), Vec2::ZERO)
+            .expect("registered creature failed to spawn");
     }
 }
 
@@ -66,22 +59,66 @@ pub fn update_creature_spawners(world: &mut World, database: &Database, camera: 
 
         let cell_index = macroquad::rand::gen_range(0, available_cells.len() as i32) as usize;
         let cell = available_cells.swap_remove(cell_index);
-        spawn_creature_at(world, database, random_creature_texture(), cell);
+        let creature_id = random_creature_id(database);
+        let position = cell_to_world(cell.x as i32, cell.y as i32);
+        spawn_creature(world, database, creature_id, position, vec2(0.0, -32.0), Vec2::ZERO)
+            .expect("registered creature failed to spawn");
     }
 }
 
-fn random_creature_texture() -> &'static str {
-    let total_weight: u32 = CREATURE_SPAWN_WEIGHTS.iter().sum();
+fn random_creature_id(database: &Database) -> &str {
+    let total_weight: u32 = database.creatures.values().map(|creature| creature.spawn_weight).sum();
     let mut choice = macroquad::rand::gen_range(0, total_weight as i32) as u32;
 
-    for (texture_path, weight) in CREATURE_TEXTURES.iter().zip(CREATURE_SPAWN_WEIGHTS) {
-        if choice < weight {
-            return texture_path;
+    for creature in database.creatures.values() {
+        if choice < creature.spawn_weight {
+            return &creature.id;
         }
-        choice -= weight;
+        choice -= creature.spawn_weight;
     }
 
     unreachable!("creature spawn weights must have a non-zero total")
+}
+
+pub fn spawn_creature(
+    world: &mut World,
+    database: &Database,
+    creature_id: &str,
+    position: Vec2,
+    position_offset: Vec2,
+    sprite_offset: Vec2,
+) -> Result<hecs::Entity, String> {
+    let creature = database
+        .creatures
+        .get(creature_id)
+        .ok_or_else(|| format!("unknown creature id: {creature_id}"))?;
+    let texture = database
+        .textures
+        .get(&creature.texture_path)
+        .ok_or_else(|| format!("texture not loaded for creature: {creature_id}"))?
+        .clone();
+
+    Ok(world.spawn((
+        Health::new(creature.maximum_health),
+        Position {
+            value: position,
+            offset: position_offset,
+        },
+        BezierMovement {
+            p0: position,
+            p1: position,
+            p2: position,
+            t: 0.0,
+            has_started: false,
+            speed: MOVEMENT_SPEED,
+        },
+        RandomWalker {},
+        Sprite {
+            color: color::WHITE,
+            texture,
+            offset: sprite_offset,
+        },
+    )))
 }
 
 fn available_creature_spawn_cells(world: &World, camera: &Camera2D) -> Vec<Vec2> {
@@ -148,35 +185,4 @@ fn available_creature_spawn_cells(world: &World, camera: &Camera2D) -> Vec<Vec2>
                 }
         })
         .collect()
-}
-
-fn spawn_creature_at(world: &mut World, database: &Database, texture_path: &str, cell: Vec2) {
-    let position = cell_to_world(cell.x as i32, cell.y as i32);
-    let texture = database
-        .textures
-        .get(texture_path)
-        .expect("creature texture not found")
-        .clone();
-
-    world.spawn((
-        Health::new(MAX_HEALTH),
-        Position {
-            value: position,
-            offset: vec2(0.0, -32.0),
-        },
-        BezierMovement {
-            p0: position,
-            p1: position,
-            p2: position,
-            t: 0.0,
-            has_started: false,
-            speed: MOVEMENT_SPEED,
-        },
-        RandomWalker {},
-        Sprite {
-            color: color::WHITE,
-            texture,
-            offset: vec2(0.0, 0.0),
-        },
-    ));
 }

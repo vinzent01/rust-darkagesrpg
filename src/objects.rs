@@ -27,9 +27,10 @@ pub struct TreeFall {
     pub elapsed: f32,
 }
 
-pub struct TreeSounds {
+pub struct GameSounds {
     pub chop: Sound,
     pub fall: Sound,
+    pub footstep: Sound,
 }
 
 const TREE_HITS_TO_FELL: u8 = 4;
@@ -37,10 +38,11 @@ pub const TREE_FALL_ROTATION_DURATION: f32 = 0.8;
 pub const TREE_FALL_FADE_DURATION: f32 = 0.7;
 pub const TREE_FALL_DURATION: f32 = TREE_FALL_ROTATION_DURATION + TREE_FALL_FADE_DURATION;
 
-pub async fn load_tree_sounds() -> Result<TreeSounds, String> {
-    Ok(TreeSounds {
+pub async fn load_game_sounds() -> Result<GameSounds, String> {
+    Ok(GameSounds {
         chop: load_mp3_sound("./content/sound-effects/chopdown-axe.mp3").await?,
         fall: load_mp3_sound("./content/sound-effects/falling-tree.mp3").await?,
+        footstep: load_mp3_sound("./content/sound-effects/footstep.mp3").await?,
     })
 }
 
@@ -115,6 +117,10 @@ fn decode_mp3_to_wav(mp3_data: &[u8]) -> Result<Vec<u8>, String> {
 }
 
 impl Tree {
+    pub fn can_be_attacked(&self, has_axe: bool) -> bool {
+        has_axe && (self.fall.is_none() || self.felled)
+    }
+
     pub fn take_axe_hit(&mut self, fall_direction: Vec2) -> Option<bool> {
         if self.fall.is_some() || self.felled {
             return None;
@@ -149,7 +155,7 @@ pub fn update_tree_falls(world: &mut World, dt: f32) {
 pub fn finish_tree_felling(
     world: &mut World,
     database: &Database,
-    sounds: Option<&TreeSounds>,
+    sounds: Option<&GameSounds>,
     entity: Entity,
     player_position: Vec2,
 ) -> Option<bool> {
@@ -178,17 +184,53 @@ pub fn finish_tree_felling(
         if let Some(sounds) = sounds {
             play_sound_once(&sounds.fall);
         }
-        let item = ItemRef {
-            id: "wood".to_string(),
-            quantity: 1,
-        };
-        if !inventory::add_item_to_player(world, database, item.clone()) {
-            if let Some(position) = inventory::find_drop_position(world, tree_position) {
-                world.spawn((inventory::GroundItem { item, position },));
-            }
-        }
+        add_tree_wood(world, database, tree_position, 4);
     }
     Some(felled)
+}
+
+pub fn remove_tree_stump(
+    world: &mut World,
+    database: &Database,
+    sounds: Option<&GameSounds>,
+    entity: Entity,
+) -> bool {
+    let Ok(tree_position) = world.get::<&Position>(entity).map(|position| position.value) else {
+        return false;
+    };
+    if !world
+        .get::<&Tree>(entity)
+        .is_ok_and(|tree| tree.felled)
+    {
+        return false;
+    }
+
+    if !add_tree_wood(world, database, tree_position, 1) {
+        return false;
+    }
+    if let Some(sounds) = sounds {
+        play_sound_once(&sounds.chop);
+    }
+    world
+        .despawn(entity)
+        .expect("tree stump disappeared before removal");
+    true
+}
+
+fn add_tree_wood(world: &mut World, database: &Database, position: Vec2, quantity: i32) -> bool {
+    let item = ItemRef {
+        id: "wood".to_string(),
+        quantity,
+    };
+    if inventory::add_item_to_player(world, database, item.clone()) {
+        return true;
+    }
+
+    let Some(position) = inventory::find_drop_position(world, position) else {
+        return false;
+    };
+    world.spawn((inventory::GroundItem { item, position },));
+    true
 }
 
 pub struct Chest{
@@ -233,8 +275,12 @@ pub fn interact_chest(world: &mut World, camera: &Camera2D) {
 #[cfg(test)]
 mod tests {
     use super::{Tree, TreeFall, decode_mp3_to_wav};
+    use crate::database::Database;
+    use crate::inventory::{Inventory, Item, MAX_INVENTORY_WEIGHT_KG};
+    use crate::movement::Position;
+    use crate::player::Player;
     use hecs::World;
-    use macroquad::prelude::vec2;
+    use macroquad::prelude::{Rect, vec2};
 
     #[test]
     fn tree_falls_on_fourth_axe_hit_and_only_once() {
@@ -254,6 +300,23 @@ mod tests {
             Some(vec2(-1.0, 0.0))
         );
         assert_eq!(tree.take_axe_hit(vec2(1.0, 0.0)), None);
+    }
+
+    #[test]
+    fn felled_tree_stump_can_be_attacked_with_an_axe() {
+        let mut stump = Tree {
+            hits: 4,
+            fall: Some(TreeFall {
+                direction: vec2(1.0, 0.0),
+                elapsed: super::TREE_FALL_DURATION,
+            }),
+            felled: true,
+        };
+        assert!(stump.can_be_attacked(true));
+        assert!(!stump.can_be_attacked(false));
+
+        stump.felled = false;
+        assert!(!stump.can_be_attacked(true));
     }
 
     #[test]
@@ -281,11 +344,64 @@ mod tests {
         for path in [
             "./content/sound-effects/chopdown-axe.mp3",
             "./content/sound-effects/falling-tree.mp3",
+            "./content/sound-effects/footstep.mp3",
         ] {
             let mp3 = std::fs::read(path).unwrap();
             let wav = decode_mp3_to_wav(&mp3).unwrap();
             assert_eq!(&wav[..4], b"RIFF");
             assert_eq!(&wav[8..12], b"WAVE");
         }
+    }
+
+    #[test]
+    fn removing_felled_tree_stump_grants_one_wood_and_despawns_it() {
+        let mut world = World::new();
+        let mut database = Database::new();
+        database.items.insert(
+            "wood".to_string(),
+            Item {
+                id: "wood".to_string(),
+                name: "Madeira".to_string(),
+                weight: 1.0,
+                texture_path: "./content/vegetation/wood.png".to_string(),
+                equipment: None,
+            },
+        );
+        let player = world.spawn((
+            Player {},
+            Inventory {
+                items: vec![None; 25],
+                weight: 0.0,
+                max_weight: MAX_INVENTORY_WEIGHT_KG,
+                rect: Rect::new(0.0, 0.0, 100.0, 100.0),
+            },
+        ));
+        let stump = world.spawn((
+            Position {
+                value: vec2(64.0, 64.0),
+                offset: vec2(0.0, 0.0),
+            },
+            Tree {
+                hits: 4,
+                fall: Some(TreeFall {
+                    direction: vec2(1.0, 0.0),
+                    elapsed: super::TREE_FALL_DURATION,
+                }),
+                felled: true,
+            },
+        ));
+
+        assert!(super::remove_tree_stump(
+            &mut world,
+            &database,
+            None,
+            stump
+        ));
+        assert!(world.get::<&Tree>(stump).is_err());
+        let inventory = world.get::<&Inventory>(player).unwrap();
+        let wood = inventory.items[0].as_ref().unwrap();
+        assert_eq!(wood.id, "wood");
+        assert_eq!(wood.quantity, 1);
+        assert_eq!(inventory.weight, 1.0);
     }
 }

@@ -5,6 +5,7 @@ use std::{fs, vec};
 use macroquad::prelude::*;
 
 use crate::body::{Race, Sprite, get_default_hair_color, get_default_skin_color};
+use crate::health::MAX_HEALTH;
 use crate::inventory::{EquipmentSlot, Item, ItemEquipment};
 use crate::tilemap::{TileDefinition, TileId};
 
@@ -15,7 +16,16 @@ pub struct Database {
     pub races : HashMap<String, Race>,
     pub textures : HashMap<String, Texture2D>,
     pub items : HashMap<String, Item>,
+    pub creatures: HashMap<String, CreatureDefinition>,
     texture_alpha: RefCell<HashMap<miniquad::TextureId, TextureAlpha>>,
+}
+
+pub struct CreatureDefinition {
+    pub id: String,
+    pub name: String,
+    pub texture_path: String,
+    pub maximum_health: i32,
+    pub spawn_weight: u32,
 }
 
 struct TextureAlpha {
@@ -42,6 +52,7 @@ impl Database {
             races: HashMap::new(),
             textures : HashMap::new(),
             items : HashMap::new(),
+            creatures: HashMap::new(),
             texture_alpha: RefCell::new(HashMap::new()),
         }
     }
@@ -75,6 +86,35 @@ impl Database {
         self.register_hairs().await;
         self.register_races().await;
         self.register_items();
+        self.register_creatures();
+    }
+
+    fn register_creatures(&mut self) {
+        for (id, name, texture_path, spawn_weight) in [
+            ("bear", "Urso", "./content/creatures/bear.png", 2),
+            ("deer", "Cervo", "./content/creatures/deer.png", 6),
+            ("griffon", "Grifo", "./content/creatures/griffon.png", 1),
+            ("rabbit", "Coelho", "./content/creatures/rabbit.png", 8),
+            (
+                "white_horse",
+                "Cavalo branco",
+                "./content/creatures/white-horse.png",
+                6,
+            ),
+            ("horse", "Cavalo", "./content/creatures/horse.png", 6),
+            ("wolf", "Lobo", "./content/creatures/wolf.png", 8),
+        ] {
+            self.creatures.insert(
+                id.to_string(),
+                CreatureDefinition {
+                    id: id.to_string(),
+                    name: name.to_string(),
+                    texture_path: texture_path.to_string(),
+                    maximum_health: MAX_HEALTH,
+                    spawn_weight,
+                },
+            );
+        }
     }
 
     fn register_items(&mut self) {
@@ -319,7 +359,8 @@ impl Database {
 
 #[cfg(test)]
 mod tests {
-    use super::TextureAlpha;
+    use super::{Database, TextureAlpha};
+    use crate::health::MAX_HEALTH;
 
     #[test]
     fn texture_alpha_mask_only_hits_nontransparent_pixels() {
@@ -335,5 +376,31 @@ mod tests {
         assert!(mask.is_opaque(1, 1));
         assert!(!mask.is_opaque(2, 0));
         assert!(!mask.is_opaque(0, 2));
+    }
+
+    #[test]
+    fn registers_all_default_creatures_with_spawn_weights() {
+        let mut database = Database::new();
+        database.register_creatures();
+
+        let expected = [
+            ("bear", "./content/creatures/bear.png", 2),
+            ("deer", "./content/creatures/deer.png", 6),
+            ("griffon", "./content/creatures/griffon.png", 1),
+            ("rabbit", "./content/creatures/rabbit.png", 8),
+            ("white_horse", "./content/creatures/white-horse.png", 6),
+            ("horse", "./content/creatures/horse.png", 6),
+            ("wolf", "./content/creatures/wolf.png", 8),
+        ];
+        assert_eq!(database.creatures.len(), expected.len());
+
+        for (id, texture_path, spawn_weight) in expected {
+            let creature = &database.creatures[id];
+            assert_eq!(creature.id, id);
+            assert_eq!(creature.texture_path, texture_path);
+            assert_eq!(creature.maximum_health, MAX_HEALTH);
+            assert_eq!(creature.spawn_weight, spawn_weight);
+            assert!(!creature.name.is_empty());
+        }
     }
 }

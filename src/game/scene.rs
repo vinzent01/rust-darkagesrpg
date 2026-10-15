@@ -4,8 +4,7 @@ use macroquad::{color, prelude::*};
 use crate::body::{Sprite, SpriteOverlay};
 use crate::database::Database;
 use crate::inventory::{INVENTORY_SLOT_COUNT, Inventory};
-use crate::health::{Health, MAX_HEALTH};
-use crate::movement::{BezierMovement, MOVEMENT_SPEED, Position, RandomWalker};
+use crate::movement::Position;
 use crate::objects::{Chest, OnOffSprite, Solid, Tree};
 use crate::player;
 use crate::spawner;
@@ -36,34 +35,27 @@ pub async fn spawn_entities(world: &mut World, database: &Database) {
         (TILE_SIZE - horse_texture.height()),
     );
 
-    world.spawn((
-        Health::new(MAX_HEALTH),
-        Position {
-            value: cell_to_world(3, 2),
-            offset: Vec2::ZERO,
-        },
-        BezierMovement {
-            p0: cell_to_world(3, 2),
-            p1: cell_to_world(3, 2),
-            p2: cell_to_world(3, 2),
-            t: 0.0,
-            has_started: false,
-            speed: MOVEMENT_SPEED,
-        },
-        RandomWalker {},
-        Sprite {
-            color: color::WHITE,
-            texture: horse_texture,
-            offset: horse_sprite_offset,
-        },
-        SpriteOverlay {
-            sprite: Sprite {
-                color: color::WHITE,
-                texture: saddle_texture,
-                offset: vec2(29.0, 47.0) + horse_sprite_offset,
+    let horse = spawner::spawn_creature(
+        world,
+        database,
+        "horse",
+        cell_to_world(3, 2),
+        Vec2::ZERO,
+        horse_sprite_offset,
+    )
+    .expect("initial horse failed to spawn");
+    world
+        .insert_one(
+            horse,
+            SpriteOverlay {
+                sprite: Sprite {
+                    color: color::WHITE,
+                    texture: saddle_texture,
+                    offset: vec2(29.0, 47.0) + horse_sprite_offset,
+                },
             },
-        },
-    ));
+        )
+        .expect("initial horse disappeared before saddle was added");
 
     let chest_open_texture = load_texture("./content/chests/chest-open.png")
         .await

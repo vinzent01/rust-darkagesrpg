@@ -46,11 +46,11 @@ Os arquivos de `content/` são carregados por caminhos relativos ao diretório d
 
 | Entrada | Ação |
 | --- | --- |
-| `W`, `A`, `S`, `D` | Move o personagem |
+| `W`, `A`, `S`, `D` | Move o personagem; cada passo toca o som de caminhada |
 | Setas | Move o personagem |
 | `H` | Alterna a visualização dos hitboxes dos sprites |
 | Segurar `Shift` | Ativa o modo de ataque; clique em uma entidade para caminhar célula a célula e atacar corpo a corpo (20 de dano); vida atual/máxima aparece acima do jogador e das criaturas (100 máxima) |
-| Segurar `Shift` e clicar em uma árvore com machado de pedra equipado | Golpeia a árvore com som; após quatro golpes, a copa tomba com som de queda, depois desvanece e concede madeira |
+| Segurar `Shift` e clicar em uma árvore ou toco com machado de pedra equipado | Golpeia a árvore com som; após quatro golpes, a copa tomba com som de queda, depois desvanece e concede madeira. Um golpe adicional remove o toco e concede mais 1 madeira |
 | `I` | Abre ou fecha o inventário |
 | Clique com o botão direito em uma roupa, ferramenta, arma ou escudo | Equipa ou desequipa o item; o inventário destaca os itens equipados |
 | Clique esquerdo em um baú | Abre o baú e seus painéis de armazenamento |
@@ -111,9 +111,9 @@ O conteúdo inicial do inventário é definido em `src/player.rs`; as definiçõ
 
 ### Criaturas
 
-O spawner é atualizado a cada movimento válido iniciado pelo jogador. A cada dez turnos, tenta gerar uma criatura em uma célula livre, dentro do mapa e fora da área visível da câmera. Os tipos e seus pesos relativos estão definidos em `src/spawner.rs`; a lista atual inclui urso, cervo, grifo, coelho, cavalo branco, cavalo e lobo.
+As definições das criaturas (ID, nome, textura, vida máxima e peso de aparição) são registradas em `src/database.rs`, junto ao carregamento dos itens. O cavalo branco, o cavalo, o urso, o cervo, o grifo, o coelho e o lobo ficam disponíveis no campo `Database::creatures`. `spawner::spawn_creature` instancia qualquer criatura registrada em uma posição escolhida.
 
-O cavalo inicial e as criaturas geradas possuem componentes de movimento aleatório.
+O spawner é atualizado a cada movimento válido iniciado pelo jogador. A cada dez turnos, tenta gerar uma criatura com base nos pesos relativos do registro, em uma célula livre do mapa e fora da área visível da câmera. O cavalo inicial e as criaturas geradas possuem componentes de movimento aleatório.
 
 ## Estrutura do projeto
 
