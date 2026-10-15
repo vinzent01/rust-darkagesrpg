@@ -6,6 +6,8 @@ use crate::player::Player;
 use crate::tilemap::{MAP_HEIGHT, MAP_WIDTH};
 use crate::objects::Solid;
 
+pub const MOVEMENT_SPEED: f32 = 3.0;
+
 pub struct Position {
     pub value : Vec2,
     pub offset : Vec2

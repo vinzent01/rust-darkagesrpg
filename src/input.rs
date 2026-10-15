@@ -33,17 +33,18 @@ pub fn is_blocked(world: &World, position: Vec2) -> bool {
 }
 
 pub fn movement_input(world: &World) -> bool {
-    let direction = if is_key_pressed(KeyCode::A) || is_key_pressed(KeyCode::Left) {
-        vec2(-1.0, 0.0)
-    } else if is_key_pressed(KeyCode::D) || is_key_pressed(KeyCode::Right) {
-        vec2(1.0, 0.0)
-    } else if is_key_pressed(KeyCode::W) || is_key_pressed(KeyCode::Up) {
-        vec2(0.0, -1.0)
-    } else if is_key_pressed(KeyCode::S) || is_key_pressed(KeyCode::Down) {
-        vec2(0.0, 1.0)
-    } else {
+    let left = is_key_down(KeyCode::A) || is_key_down(KeyCode::Left);
+    let right = is_key_down(KeyCode::D) || is_key_down(KeyCode::Right);
+    let up = is_key_down(KeyCode::W) || is_key_down(KeyCode::Up);
+    let down = is_key_down(KeyCode::S) || is_key_down(KeyCode::Down);
+
+    let direction = vec2(
+        right as i8 as f32 - left as i8 as f32,
+        down as i8 as f32 - up as i8 as f32,
+    );
+    if direction == Vec2::ZERO {
         return false;
-    };
+    }
 
     for (bezier, pos, _) in world
         .query::<(&mut BezierMovement, &Position, &Input)>()

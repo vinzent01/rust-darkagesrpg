@@ -1,85 +1,151 @@
 use macroquad::prelude::*;
-use hecs::World;
+use hecs::{Entity, World};
 
 use crate::database::Database;
 use crate::movement::Position;
-use crate::objects::OnOffSprite;
+use crate::objects::{OnOffSprite, Tree};
 use crate::tilemap::*;
 use crate::utils;
 use crate::body::{Appearence, Sprite, SpriteOverlay};
 
+pub fn draw_entities(world: &World, database: &Database, camera: &Camera2D) {
+    let camera_bounds = camera_world_bounds(camera);
+    let mut render_order: Vec<(f32, Entity)> = world
+        .query::<(Entity, &Position)>()
+        .iter()
+        .filter(|(entity, _)| {
+            let is_renderable = world.get::<&Sprite>(*entity).is_ok()
+                || world.get::<&SpriteOverlay>(*entity).is_ok()
+                || world.get::<&Appearence>(*entity).is_ok()
+                || world.get::<&OnOffSprite>(*entity).is_ok();
+            let visible_tree = world.get::<&Tree>(*entity).is_err()
+                || tree_is_visible(world, *entity, camera_bounds);
+            is_renderable && visible_tree
+        })
+        .map(|(entity, position)| (position.value.y, entity))
+        .collect();
+    render_order.sort_by(|(left_y, _), (right_y, _)| left_y.total_cmp(right_y));
 
-// systems
-pub fn draw_entities(world: &World, database: &Database) {
-    for (pos, sprite) in world.query::<(&Position, &Sprite)>().iter() {
-        draw_texture(
-            &sprite.texture,
-            pos.value.x + pos.offset.x + sprite.offset.x,
-            pos.value.y + pos.offset.y + sprite.offset.y,
-            sprite.color,
-        );
+    for (_, entity) in render_order {
+        let position = world
+            .get::<&Position>(entity)
+            .expect("render entity position disappeared");
+
+        if let Ok(sprite) = world.get::<&Sprite>(entity) {
+            draw_sprite(&sprite, &position);
+        }
+        if let Ok(overlay) = world.get::<&SpriteOverlay>(entity) {
+            draw_sprite(&overlay.sprite, &position);
+        }
+
+        if let Ok(sprite) = world.get::<&OnOffSprite>(entity) {
+            let sprite = if sprite.is_on { &sprite.on } else { &sprite.off };
+            draw_sprite(sprite, &position);
+        }
+
+        if let Ok(appearence) = world.get::<&Appearence>(entity) {
+            draw_appearence(&position, &appearence, database);
+        }
     }
+}
 
-    for (pos, overlay) in world.query::<(&Position, &SpriteOverlay)>().iter() {
-        let sprite = &overlay.sprite;
-        draw_texture(
-            &sprite.texture,
-            pos.value.x + pos.offset.x + sprite.offset.x,
-            pos.value.y + pos.offset.y + sprite.offset.y,
-            sprite.color,
-        );
-    }
+fn camera_world_bounds(camera: &Camera2D) -> Rect {
+    let corners = [
+        camera.screen_to_world(vec2(0.0, 0.0)),
+        camera.screen_to_world(vec2(screen_width(), 0.0)),
+        camera.screen_to_world(vec2(0.0, screen_height())),
+        camera.screen_to_world(vec2(screen_width(), screen_height())),
+    ];
+    let min = corners.iter().copied().reduce(Vec2::min).unwrap();
+    let max = corners.iter().copied().reduce(Vec2::max).unwrap();
+    Rect::new(min.x, min.y, max.x - min.x, max.y - min.y)
+}
 
-    for (pos, appearence) in world.query::<(&Position, &Appearence)>().iter() {
+fn tree_is_visible(world: &World, entity: Entity, camera_bounds: Rect) -> bool {
+    let Ok(position) = world.get::<&Position>(entity) else {
+        return false;
+    };
+    let sprite_is_visible = |sprite: &Sprite| {
+        let left = position.value.x + position.offset.x + sprite.offset.x;
+        let top = position.value.y + position.offset.y + sprite.offset.y;
+        left < camera_bounds.x + camera_bounds.w
+            && left + sprite.texture.width() > camera_bounds.x
+            && top < camera_bounds.y + camera_bounds.h
+            && top + sprite.texture.height() > camera_bounds.y
+    };
 
-        let race = database.races.get(appearence.body.race).expect("race not found");
-        let genre = &appearence.body.genre;
-        let body_sprite = if *genre{
-            &race.male_sprite
-        } else {
-            &race.female_sprite
-        };
+    world
+        .get::<&Sprite>(entity)
+        .is_ok_and(|sprite| sprite_is_visible(&sprite))
+        || world
+            .get::<&SpriteOverlay>(entity)
+            .is_ok_and(|overlay| sprite_is_visible(&overlay.sprite))
+}
 
-        // draw body
+fn draw_sprite(sprite: &Sprite, position: &Position) {
+    draw_texture(
+        &sprite.texture,
+        position.value.x + position.offset.x + sprite.offset.x,
+        position.value.y + position.offset.y + sprite.offset.y,
+        sprite.color,
+    );
+}
+
+fn draw_appearence(position: &Position, appearence: &Appearence, database: &Database) {
+    let race = database
+        .races
+        .get(appearence.body.race)
+        .expect("race not found");
+    let body_sprite = if appearence.body.genre {
+        &race.male_sprite
+    } else {
+        &race.female_sprite
+    };
+
+    draw_texture_ex(
+        &body_sprite.texture,
+        position.value.x + position.offset.x,
+        position.value.y + position.offset.y,
+        race.default_skin_color,
+        DrawTextureParams {
+            flip_x: appearence.is_flipped,
+            ..Default::default()
+        },
+    );
+
+    if let Some(beard_id) = appearence.beard {
+        let beard = &database.hairs[beard_id];
         draw_texture_ex(
-            &body_sprite.texture,
-            pos.value.x + pos.offset.x,
-            pos.value.y + pos.offset.y,
-            race.default_skin_color,
-            DrawTextureParams {flip_x : appearence.is_flipped, ..Default::default()}
-        );
-        
-        if let Some(beard_id) = &appearence.beard{
-            let beard = &database.hairs[*beard_id];
-            draw_texture_ex(
-            &beard.texture, 
-            pos.value.x, pos.value.y, 
+            &beard.texture,
+            position.value.x,
+            position.value.y,
             beard.color,
-            DrawTextureParams {flip_x : appearence.is_flipped, ..Default::default()}
-        )};
+            DrawTextureParams {
+                flip_x: appearence.is_flipped,
+                ..Default::default()
+            },
+        );
+    }
 
-        if let Some(hair_id) = &appearence.hair{
-            let hair = &database.hairs[*hair_id];
-            let body_width = body_sprite.texture.width();
-            let hair_width = hair.texture.width();
-
-            let hair_x = if appearence.is_flipped {
-                pos.value.x + body_width - hair.offset.x - hair_width
-            } else {
-                pos.value.x + hair.offset.x
-            };
-
-            draw_texture_ex(
-                &hair.texture,
-                hair_x,
-                pos.value.y + hair.offset.y,
-                hair.color,
-                DrawTextureParams {
-                    flip_x: appearence.is_flipped,
-                    ..Default::default()
-                },
-            );
+    if let Some(hair_id) = appearence.hair {
+        let hair = &database.hairs[hair_id];
+        let body_width = body_sprite.texture.width();
+        let hair_x = if appearence.is_flipped {
+            position.value.x + body_width - hair.offset.x - hair.texture.width()
+        } else {
+            position.value.x + hair.offset.x
         };
+
+        draw_texture_ex(
+            &hair.texture,
+            hair_x,
+            position.value.y + hair.offset.y,
+            hair.color,
+            DrawTextureParams {
+                flip_x: appearence.is_flipped,
+                ..Default::default()
+            },
+        );
     }
 }
 
@@ -121,18 +187,6 @@ pub fn draw_tilemap(world: &World, database : &Database, camera : &Camera2D) {
                     }
                 }
             }
-        }
-    }
-}
-
-
-pub fn draw_on_off(world: &World, database: &Database) {
-    for (pos, obj) in world.query::<(&Position, &OnOffSprite)>().iter() {
-        if obj.is_on{
-            draw_texture(&obj.on.texture, pos.value.x + pos.offset.x, pos.value.y + pos.offset.y, obj.on.color);
-        }
-        else {
-            draw_texture(&obj.off.texture, pos.value.x + pos.offset.x, pos.value.y + pos.offset.y, obj.off.color);
         }
     }
 }

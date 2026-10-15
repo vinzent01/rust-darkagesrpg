@@ -34,6 +34,40 @@ impl Database {
         self.register_tiles().await;
         self.register_hairs().await;
         self.register_races().await;
+        self.register_items();
+    }
+
+    fn register_items(&mut self) {
+        for (id, name, weight, texture_path) in [
+            (
+                "stick",
+                "Graveto",
+                0.1,
+                "./content/crafting-items/stick.png",
+            ),
+            (
+                "stone_axe",
+                "Machado de pedra",
+                1.5,
+                "./content/melee weapons/stone-axe.png",
+            ),
+            (
+                "pickaxe",
+                "Picareta",
+                2.0,
+                "./content/melee weapons/pickAxe.png",
+            ),
+        ] {
+            self.items.insert(
+                id.to_string(),
+                Item {
+                    id: id.to_string(),
+                    name: name.to_string(),
+                    weight,
+                    texture_path: texture_path.to_string(),
+                },
+            );
+        }
     }
 
     fn collect_files(&self, path: &Path, files: &mut Vec<PathBuf>) {

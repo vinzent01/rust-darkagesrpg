@@ -2,13 +2,24 @@ use hecs::{Entity, World};
 use macroquad::{color, prelude::*};
 
 use crate::database::Database;
-use crate::utils::max_f;
+use crate::inventory::{GroundItem, Inventory, ItemRef};
+use crate::movement::Position;
+use crate::player::Player;
+
+const INVENTORY_WIDTH: f32 = 420.0;
+const INVENTORY_PADDING: f32 = 12.0;
+const INVENTORY_HEADER_HEIGHT: f32 = 76.0;
+const INVENTORY_ROW_HEIGHT: f32 = 46.0;
+const INVENTORY_MAX_VISIBLE_ROWS: usize = 9;
 
 pub struct UIInventory {
     pub rect : Rect,
     pub bg_color : Color,
     pub is_handling : bool,
     pub drag_offset: Vec2,
+    pub dragged_item: Option<ItemRef>,
+    pub drag_source_slot: Option<usize>,
+    pub scroll: usize,
 }
 
 pub struct UIButton{
@@ -32,124 +43,432 @@ fn draw_round_rect(x: f32, y: f32, w: f32, h: f32, r: f32, color: Color) {
     draw_circle(x + w - r, y + h - r, r, color);
 }
 
-pub fn update_ui(world : &mut World){
+pub fn update_ui(world: &mut World, database: &Database) -> bool {
     handle_spawn_ui(world);
-    update_inventory_ui(world);
-}   
+    update_inventory_ui(world, database);
+    world.query::<&UIInventory>().iter().next().is_some()
+}
+
+pub fn ensure_inventory_ui(world: &mut World) {
+    if world.query::<&UIInventory>().iter().next().is_some() {
+        return;
+    }
+
+    let window_size = inventory_window_size();
+    world.spawn((UIInventory {
+        bg_color: Color::from_rgba(32, 32, 32, 255),
+        rect: Rect::new(
+            (screen_width() - window_size.x) * 0.5,
+            (screen_height() - window_size.y) * 0.5,
+            window_size.x,
+            window_size.y,
+        ),
+        is_handling: false,
+        drag_offset: vec2(0.0, 0.0),
+        dragged_item: None,
+        drag_source_slot: None,
+        scroll: 0,
+    },));
+}
+
+pub fn inventory_slot_at_position(world: &World, point: Vec2) -> Option<usize> {
+    let (rect, scroll) = world
+        .query::<&UIInventory>()
+        .iter()
+        .next()
+        .map(|ui| (ui.rect, ui.scroll))?;
+    let inventory_entity = player_inventory_entity(world)?;
+    let slot_count = world.get::<&Inventory>(inventory_entity).ok()?.items.len();
+    slot_at_position(rect, scroll, slot_count, point)
+}
+
+fn player_inventory_entity(world: &World) -> Option<Entity> {
+    world
+        .query::<(Entity, &Player, &Inventory)>()
+        .iter()
+        .next()
+        .map(|(entity, _, _)| entity)
+}
 
 pub fn handle_spawn_ui(world: &mut World) {
 
     if is_key_pressed(KeyCode::I) {
-        let inventory = {
+        let inventory_ui = {
             let mut query = world.query::<(Entity, &UIInventory)>();
-            query.iter().next().map(|(entity, _)| entity)
+            query.iter().next().map(|(entity, ui)| {
+                (
+                    entity,
+                    ui.drag_source_slot,
+                    ui.dragged_item.clone(),
+                )
+            })
         };
 
-        if let Some(entity) = inventory {
+        if let Some((entity, source_slot, dragged_item)) = inventory_ui {
+            if let (Some(source_slot), Some(dragged_item)) = (source_slot, dragged_item) {
+                if let Some(entity) = player_inventory_entity(world) {
+                    if let Ok(mut inventory) = world.get::<&mut Inventory>(entity) {
+                    if let Some(slot) = inventory.items.get_mut(source_slot) {
+                        *slot = Some(dragged_item);
+                    }
+                    }
+                }
+            }
             world.despawn(entity).unwrap();
         } else {
-            let screen_width = screen_width();
-            let screen_height = screen_height();
-            
-            world.spawn((
-                UIInventory {
-                    bg_color: Color::from_rgba(32, 32, 32, 255),
-                    rect: Rect::new(screen_width/2.0, screen_height/2.0, 100.0, 100.0),
-                    is_handling: false,
-                    drag_offset: vec2(0.0, 0.0),
-                },
-            ));
+            ensure_inventory_ui(world);
         }
     }
 }
 
-pub fn draw_inventory_ui(world : &mut World, database : &Database){
-    let inventory_slot = database.textures.get("./content/hud/item_slot.png").unwrap();
-    let scale = 2.0;
+fn inventory_window_size() -> Vec2 {
+    let maximum_height = (screen_height() - 24.0)
+        .max(INVENTORY_HEADER_HEIGHT + INVENTORY_ROW_HEIGHT + INVENTORY_PADDING * 2.0);
+    let visible_rows = ((maximum_height - INVENTORY_HEADER_HEIGHT - INVENTORY_PADDING * 2.0)
+        / INVENTORY_ROW_HEIGHT)
+        .floor()
+        .clamp(1.0, INVENTORY_MAX_VISIBLE_ROWS as f32);
+    vec2(
+        INVENTORY_WIDTH.min((screen_width() - 24.0).max(180.0)),
+        INVENTORY_HEADER_HEIGHT + visible_rows * INVENTORY_ROW_HEIGHT + INVENTORY_PADDING * 2.0,
+    )
+}
 
-    let slot_width = inventory_slot.width() * scale;
-    let slot_height = inventory_slot.height() * scale;
+fn inventory_list_top(rect: Rect) -> f32 {
+    rect.y + INVENTORY_PADDING + INVENTORY_HEADER_HEIGHT
+}
 
-    for inv in world.query::<&mut UIInventory>().iter(){
-        let slots = 5;        
-        let padding =20.0;
+fn inventory_visible_rows(rect: Rect) -> usize {
+    ((rect.h - INVENTORY_PADDING * 2.0 - INVENTORY_HEADER_HEIGHT) / INVENTORY_ROW_HEIGHT)
+        .floor()
+        .max(1.0) as usize
+}
 
+fn slot_at_position(rect: Rect, scroll: usize, slot_count: usize, point: Vec2) -> Option<usize> {
+    let list_top = inventory_list_top(rect);
+    let relative_y = point.y - list_top;
+    if point.x < rect.x + INVENTORY_PADDING
+        || point.x >= rect.x + rect.w - INVENTORY_PADDING
+        || relative_y < 0.0
+        || relative_y >= inventory_visible_rows(rect) as f32 * INVENTORY_ROW_HEIGHT
+    {
+        return None;
+    }
 
-        let total_size_x =  (slot_width * slots as f32) + padding * 2.0; 
-        let total_size_y =  (slot_height * slots as f32) + padding * 2.0;
+    let index = scroll + (relative_y / INVENTORY_ROW_HEIGHT) as usize;
+    (index < slot_count).then_some(index)
+}
 
-        inv.rect.w = max_f(inv.rect.w, total_size_x);
-        inv.rect.h = max_f(inv.rect.h, total_size_y);
+pub fn draw_inventory_ui(world : &World, database : &Database){
+    let inventory_entity =
+        player_inventory_entity(world).expect("player inventory must be initialized");
+    let inventory = world
+        .get::<&Inventory>(inventory_entity)
+        .expect("player inventory disappeared");
+    let items: Vec<Option<(String, i32)>> = inventory
+        .items
+        .iter()
+        .map(|item| item.as_ref().map(|item| (item.id.clone(), item.quantity)))
+        .collect();
+    let weight = inventory.weight;
+    let max_weight = inventory.max_weight;
 
-
-        let inventory_text = "Inventory";
-        let label_font_size = 24;
-        let text_size = measure_text(inventory_text, None, label_font_size, 1.0);
-        let middle_pos = inv.rect.x + (inv.rect.w / 2.0) - (text_size.width / 2.0);
-        let top_pos = inv.rect.y + 10.0;
-
+    for inv in world.query::<&UIInventory>().iter() {
+        let rect = inv.rect;
         draw_round_rect(
-            inv.rect.x, 
-            inv.rect.y, 
-            inv.rect.w,
-            inv.rect.h, 
-            12.0, 
-            inv.bg_color
+            rect.x,
+            rect.y,
+            rect.w,
+            rect.h,
+            12.0,
+            inv.bg_color,
+        );
+        draw_text(
+            "Inventario",
+            rect.x + INVENTORY_PADDING,
+            rect.y + 30.0,
+            24.0,
+            color::WHITE,
+        );
+        draw_text(
+            &format!("Peso: {:.2} / {:.2} kg", weight, max_weight),
+            rect.x + INVENTORY_PADDING,
+            rect.y + 56.0,
+            18.0,
+            if weight >= max_weight { RED } else { LIGHTGRAY },
         );
 
-        draw_text(inventory_text, middle_pos, top_pos, label_font_size as f32, color::WHITE);
+        let visible_rows = inventory_visible_rows(rect);
+        for row in 0..visible_rows {
+            let item_index = inv.scroll + row;
+            if item_index >= items.len() {
+                break;
+            }
+            let row_y = inventory_list_top(rect) + row as f32 * INVENTORY_ROW_HEIGHT;
+            draw_rectangle(
+                rect.x + INVENTORY_PADDING,
+                row_y,
+                rect.w - INVENTORY_PADDING * 2.0,
+                INVENTORY_ROW_HEIGHT - 3.0,
+                Color::from_rgba(55, 55, 55, 255),
+            );
 
-        let slot_start_x = inv.rect.x + padding;
-        let slot_start_y = inv.rect.y + padding;
-
-    
-        for x in 0..5{
-            for y in 0..5{
+            if let Some((item_id, quantity)) = &items[item_index] {
+                let item = database
+                    .items
+                    .get(item_id)
+                    .expect("inventory item definition not found");
+                let texture = database
+                    .textures
+                    .get(&item.texture_path)
+                    .expect("inventory item texture not found");
                 draw_texture_ex(
-                    inventory_slot, 
-                    slot_start_x + x as f32 * slot_width, 
-                    slot_start_y + y as f32 * slot_height,
+                    texture,
+                    rect.x + INVENTORY_PADDING + 6.0,
+                    row_y + 7.0,
                     color::WHITE,
-                    DrawTextureParams{
-                        dest_size:  Some(
-                            vec2(slot_width, slot_height)
-                        ),
+                    DrawTextureParams {
+                        dest_size: Some(vec2(30.0, 30.0)),
                         ..Default::default()
-                    }
+                    },
                 );
-
+                draw_text(&item.name, rect.x + 56.0, row_y + 19.0, 17.0, color::WHITE);
+                draw_text(
+                    &format!(
+                        "{} x {:.2} kg (total {:.2} kg)",
+                        quantity,
+                        item.weight,
+                        item.weight * *quantity as f32
+                    ),
+                    rect.x + 56.0,
+                    row_y + 37.0,
+                    14.0,
+                    LIGHTGRAY,
+                );
+                draw_text(
+                    &format!("#{}", item_index + 1),
+                    rect.x + rect.w - 46.0,
+                    row_y + 27.0,
+                    14.0,
+                    GRAY,
+                );
+            } else {
+                draw_text(
+                    &format!("Espaco vazio #{}", item_index + 1),
+                    rect.x + INVENTORY_PADDING + 8.0,
+                    row_y + 27.0,
+                    15.0,
+                    GRAY,
+                );
             }
         }
 
+        let mouse = mouse_position();
+        if let Some(item_ref) = &inv.dragged_item {
+            let item = database
+                .items
+                .get(&item_ref.id)
+                .expect("inventory item definition not found");
+            let texture = database
+                .textures
+                .get(&item.texture_path)
+                .expect("inventory item texture not found");
+            draw_texture_ex(
+                texture,
+                mouse.0 - 16.0,
+                mouse.1 - 16.0,
+                color::WHITE,
+                DrawTextureParams {
+                    dest_size: Some(vec2(32.0, 32.0)),
+                    ..Default::default()
+                },
+            );
+        }
     }
 }
 
-fn update_inventory_ui(world : &mut World){
+fn update_inventory_ui(world: &mut World, database: &Database) {
+    let mouse = mouse_position();
+    let mouse_pos = vec2(mouse.0, mouse.1);
+    let window_size = inventory_window_size();
+    let ui_entity = world
+        .query::<(Entity, &UIInventory)>()
+        .iter()
+        .next()
+        .map(|(entity, _)| entity);
+    let Some(ui_entity) = ui_entity else {
+        return;
+    };
 
-    let mouse_pos = mouse_position();
-    let mouse_pos = vec2(mouse_pos.0, mouse_pos.1);
-    
-    for inv in world.query::<&mut UIInventory>().iter(){
-        
-        // Começa o drag apenas no clique inicial
-        if !inv.is_handling
-            && inv.rect.contains(mouse_pos)
-            && is_mouse_button_pressed(MouseButton::Left)
+    if let Ok(mut ui) = world.get::<&mut UIInventory>(ui_entity) {
+        ui.rect.w = window_size.x;
+        ui.rect.h = window_size.y;
+    }
+
+    let (rect, scroll) = world
+        .get::<&UIInventory>(ui_entity)
+        .map(|ui| (ui.rect, ui.scroll))
+        .expect("inventory UI disappeared");
+    let item_count = world
+        .get::<&Inventory>(
+            player_inventory_entity(world).expect("player inventory must be initialized"),
+        )
+        .expect("player inventory disappeared")
+        .items
+        .len();
+
+    if rect.contains(mouse_pos) && mouse_pos.y >= inventory_list_top(rect) {
+        let (_, scroll_y) = mouse_wheel();
+        if scroll_y != 0.0 {
+            if let Ok(mut ui) = world.get::<&mut UIInventory>(ui_entity) {
+                if scroll_y < 0.0 {
+                    ui.scroll = ui.scroll.saturating_add(1);
+                } else {
+                    ui.scroll = ui.scroll.saturating_sub(1);
+                }
+                ui.scroll = ui
+                    .scroll
+                    .min(item_count.saturating_sub(inventory_visible_rows(rect)));
+            }
+        }
+    }
+    let scroll = world
+        .get::<&UIInventory>(ui_entity)
+        .map(|ui| ui.scroll)
+        .unwrap_or(scroll);
+
+    if is_mouse_button_pressed(MouseButton::Left) {
+        if let Some(slot_index) = slot_at_position(rect, scroll, item_count, mouse_pos) {
+            let item = world
+                .get::<&Inventory>(
+                    player_inventory_entity(world).expect("player inventory must be initialized"),
+                )
+                .ok()
+                .and_then(|inventory| inventory.items.get(slot_index).cloned())
+                .flatten();
+
+            if let Some(item) = item {
+                if let Some(entity) = player_inventory_entity(world) {
+                    if let Ok(mut inventory) = world.get::<&mut Inventory>(entity) {
+                    if slot_index < inventory.items.len() {
+                        inventory.items[slot_index] = None;
+                    }
+                    }
+                }
+                if let Ok(mut ui) = world.get::<&mut UIInventory>(ui_entity) {
+                    ui.dragged_item = Some(item);
+                    ui.drag_source_slot = Some(slot_index);
+                }
+            }
+        } else if rect.contains(mouse_pos)
+            && mouse_pos.y < rect.y + INVENTORY_PADDING + INVENTORY_HEADER_HEIGHT
         {
-            inv.is_handling = true;
-            inv.drag_offset = mouse_pos - vec2(inv.rect.x, inv.rect.y);
-        }
-
-        // Termina o drag ao soltar o botão
-        if inv.is_handling && is_mouse_button_released(MouseButton::Left) {
-            inv.is_handling = false;
-        }
-
-        // Move enquanto estiver arrastando
-        if inv.is_handling {
-            inv.rect.x = mouse_pos.x - inv.drag_offset.x;
-            inv.rect.y = mouse_pos.y - inv.drag_offset.y;
+            if let Ok(mut ui) = world.get::<&mut UIInventory>(ui_entity) {
+                ui.is_handling = true;
+                ui.drag_offset = mouse_pos - vec2(rect.x, rect.y);
+            }
         }
     }
 
+    if let Ok(mut ui) = world.get::<&mut UIInventory>(ui_entity) {
+        if ui.is_handling && is_mouse_button_down(MouseButton::Left) {
+            ui.rect.x = mouse_pos.x - ui.drag_offset.x;
+            ui.rect.y = mouse_pos.y - ui.drag_offset.y;
+        }
+        if is_mouse_button_released(MouseButton::Left) {
+            ui.is_handling = false;
+        }
+    }
+
+    if !is_mouse_button_released(MouseButton::Left) {
+        return;
+    }
+
+    let drag = world
+        .get::<&UIInventory>(ui_entity)
+        .ok()
+        .and_then(|ui| {
+            Some((
+                ui.drag_source_slot?,
+                ui.dragged_item.clone()?,
+                ui.rect,
+            ))
+        });
+    let Some((source_slot, dragged_item, rect)) = drag else {
+        return;
+    };
+
+    if let Some(target_slot) = slot_at_position(rect, scroll, item_count, mouse_pos) {
+        if let Some(entity) = player_inventory_entity(world) {
+            if let Ok(mut inventory) = world.get::<&mut Inventory>(entity) {
+            if target_slot < inventory.items.len() && source_slot < inventory.items.len() {
+                if target_slot == source_slot {
+                    inventory.items[source_slot] = Some(dragged_item);
+                } else if inventory.items[target_slot]
+                    .as_ref()
+                    .is_some_and(|item| item.id == dragged_item.id)
+                {
+                    if let Some(target) = inventory.items[target_slot].as_mut() {
+                        target.quantity += dragged_item.quantity;
+                    }
+                } else {
+                    let displaced_item = inventory.items[target_slot].take();
+                    inventory.items[target_slot] = Some(dragged_item);
+                    inventory.items[source_slot] = displaced_item;
+                }
+            }
+            }
+        }
+    } else if rect.contains(mouse_pos) {
+        if let Some(entity) = player_inventory_entity(world) {
+            if let Ok(mut inventory) = world.get::<&mut Inventory>(entity) {
+            inventory.items[source_slot] = Some(dragged_item);
+            }
+        }
+    } else {
+        let player_position = world
+        .query::<(&Player, &Position)>()
+        .iter()
+        .next()
+        .map(|(_, position)| position.value);
+        if let Some(player_position) = player_position {
+            if let Some(drop_position) =
+                crate::inventory::find_drop_position(world, player_position)
+            {
+                let item_weight = database
+                    .items
+                    .get(&dragged_item.id)
+                    .expect("inventory item definition not found")
+                    .weight
+                    * dragged_item.quantity as f32;
+                if let Some(entity) = player_inventory_entity(world) {
+                    if let Ok(mut inventory) = world.get::<&mut Inventory>(entity) {
+                        inventory.weight -= item_weight;
+                    }
+                }
+                for _ in 0..dragged_item.quantity {
+                    world.spawn((GroundItem {
+                        item: ItemRef {
+                            id: dragged_item.id.clone(),
+                            quantity: 1,
+                        },
+                        position: drop_position,
+                    },));
+                }
+            } else if let Some(entity) = player_inventory_entity(world) {
+                if let Ok(mut inventory) = world.get::<&mut Inventory>(entity) {
+                    inventory.items[source_slot] = Some(dragged_item);
+                }
+            }
+        } else if let Some(entity) = player_inventory_entity(world) {
+            if let Ok(mut inventory) = world.get::<&mut Inventory>(entity) {
+                inventory.items[source_slot] = Some(dragged_item);
+            }
+        }
+    }
+
+    if let Ok(mut ui) = world.get::<&mut UIInventory>(ui_entity) {
+        ui.dragged_item = None;
+        ui.drag_source_slot = None;
+    }
 }
