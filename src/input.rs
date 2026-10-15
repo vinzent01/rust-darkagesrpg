@@ -1,11 +1,258 @@
-use hecs::World;
+use hecs::{Entity, World};
 use macroquad::prelude::*;
-use crate::objects::Solid;
+use crate::objects::{Solid, Tree};
+use crate::body::{Appearence, Sprite, SpriteOverlay};
+use crate::database::Database;
+use crate::player::Player;
+use crate::objects::OnOffSprite;
+use crate::inventory::{Equipment, EquipmentSlot};
 use crate::utils;
 use crate::movement::{BezierMovement, Position, RandomWalker};
 use crate::tilemap::{MAP_HEIGHT, MAP_WIDTH};
 
 pub struct Input;
+
+pub fn attack_mode_active() -> bool {
+    is_key_down(KeyCode::LeftShift) || is_key_down(KeyCode::RightShift)
+}
+
+pub fn attack_input(world: &World, database: &Database, camera: &Camera2D) -> Option<Entity> {
+    if !attack_mode_active() || !is_mouse_button_pressed(MouseButton::Left) {
+        return None;
+    }
+
+    let target_entity = attack_target_at_cursor(world, database, camera)?;
+    if let Ok(tree) = world.get::<&Tree>(target_entity) {
+        if tree.felled || tree.fall.is_some() || !player_has_stone_axe(world) {
+            return None;
+        }
+    }
+    let Ok(target_position) = world.get::<&Position>(target_entity) else {
+        return None;
+    };
+    crate::movement::start_attack(world, target_entity, target_position.value)
+        .then_some(target_entity)
+}
+
+fn player_has_stone_axe(world: &World) -> bool {
+    world
+        .query::<(&Player, &Equipment)>()
+        .iter()
+        .any(|(_, equipment)| {
+            equipment
+                .items
+                .get(&EquipmentSlot::MainHand)
+                .is_some_and(|item_id| item_id == "stone_axe")
+        })
+}
+
+pub fn attack_target_at_cursor(
+    world: &World,
+    database: &Database,
+    camera: &Camera2D,
+) -> Option<Entity> {
+    let mouse = mouse_position();
+    let mouse_world = camera.screen_to_world(vec2(mouse.0, mouse.1));
+    let mut candidates: Vec<(f32, Entity)> = world
+        .query::<(Entity, &Position)>()
+        .iter()
+        .filter(|(entity, _)| {
+            world.get::<&Player>(*entity).is_err()
+                && (world.get::<&Sprite>(*entity).is_ok()
+                    || world.get::<&SpriteOverlay>(*entity).is_ok()
+                    || world.get::<&OnOffSprite>(*entity).is_ok()
+                    || world.get::<&Appearence>(*entity).is_ok())
+        })
+        .map(|(entity, position)| (position.value.y, entity))
+        .collect();
+    candidates.sort_by(|(left_y, _), (right_y, _)| right_y.total_cmp(left_y));
+
+    for (_, entity) in candidates {
+        let Ok(position) = world.get::<&Position>(entity) else {
+            continue;
+        };
+        let tree_overlay_hidden = world
+            .get::<&Tree>(entity)
+            .is_ok_and(|tree| tree.fall.is_some() || tree.felled);
+        let sprite_hit = world
+            .get::<&Sprite>(entity)
+            .is_ok_and(|sprite| {
+                texture_hit_at(
+                    database,
+                    &sprite.texture,
+                    position.value + position.offset + sprite.offset,
+                    mouse_world,
+                    false,
+                )
+            })
+            || (!tree_overlay_hidden
+                && world
+                    .get::<&SpriteOverlay>(entity)
+                    .is_ok_and(|overlay| {
+                        texture_hit_at(
+                            database,
+                            &overlay.sprite.texture,
+                            position.value + position.offset + overlay.sprite.offset,
+                            mouse_world,
+                            false,
+                        )
+                    }))
+            || world
+                .get::<&OnOffSprite>(entity)
+                .is_ok_and(|sprite| {
+                    let sprite = if sprite.is_on { &sprite.on } else { &sprite.off };
+                    texture_hit_at(
+                        database,
+                        &sprite.texture,
+                        position.value + position.offset + sprite.offset,
+                        mouse_world,
+                        false,
+                    )
+                });
+        let appearance_hit = world
+            .get::<&Appearence>(entity)
+            .is_ok_and(|appearance| {
+                let equipment = world
+                    .get::<&Equipment>(entity)
+                    .expect("character equipment disappeared");
+                appearance_hit_at(
+                    database,
+                    &position,
+                    &appearance,
+                    &equipment,
+                    mouse_world,
+                )
+            });
+
+        if sprite_hit || appearance_hit {
+            return Some(entity);
+        }
+    }
+
+    None
+}
+
+fn texture_hit_at(
+    database: &Database,
+    texture: &Texture2D,
+    origin: Vec2,
+    point: Vec2,
+    flip_x: bool,
+) -> bool {
+    let local_x = point.x - origin.x;
+    let local_y = point.y - origin.y;
+    if local_x < 0.0
+        || local_y < 0.0
+        || local_x >= texture.width()
+        || local_y >= texture.height()
+    {
+        return false;
+    }
+
+    let mut pixel_x = local_x.floor() as u32;
+    if flip_x {
+        pixel_x = texture.width() as u32 - 1 - pixel_x;
+    }
+    database.texture_pixel_is_opaque(texture, pixel_x, local_y.floor() as u32)
+}
+
+fn appearance_hit_at(
+    database: &Database,
+    position: &Position,
+    appearance: &Appearence,
+    equipment: &Equipment,
+    point: Vec2,
+) -> bool {
+    let race = database
+        .races
+        .get(appearance.body.race)
+        .expect("character race not found");
+    let body = if appearance.body.genre {
+        &race.male_sprite
+    } else {
+        &race.female_sprite
+    };
+    let body_origin = position.value + position.offset;
+    if texture_hit_at(database, &body.texture, body_origin, point, appearance.is_flipped) {
+        return true;
+    }
+
+    for slot in [
+        EquipmentSlot::Legs,
+        EquipmentSlot::Torso,
+        EquipmentSlot::Feet,
+        EquipmentSlot::Head,
+        EquipmentSlot::OffHand,
+        EquipmentSlot::MainHand,
+    ] {
+        let Some(item_id) = equipment.items.get(&slot) else {
+            continue;
+        };
+        let item = database
+            .items
+            .get(item_id)
+            .expect("equipped item definition not found");
+        let Some(item_equipment) = &item.equipment else {
+            continue;
+        };
+        let texture_path = if appearance.body.genre {
+            &item_equipment.male_texture_path
+        } else {
+            &item_equipment.female_texture_path
+        };
+        let texture = database
+            .textures
+            .get(texture_path)
+            .expect("equipped item texture not found");
+        let offset_x = if appearance.is_flipped {
+            -item_equipment.offset.x
+        } else {
+            item_equipment.offset.x
+        };
+        let origin = if matches!(slot, EquipmentSlot::MainHand | EquipmentSlot::OffHand) {
+            let is_main_hand = slot == EquipmentSlot::MainHand;
+            let is_on_right = is_main_hand != appearance.is_flipped;
+            let item_x = if is_on_right {
+                body_origin.x + body.texture.width()
+            } else {
+                body_origin.x - texture.width()
+            };
+            vec2(item_x + offset_x, body_origin.y + item_equipment.offset.y)
+        } else {
+            body_origin + vec2(offset_x, item_equipment.offset.y)
+        };
+        if texture_hit_at(database, texture, origin, point, appearance.is_flipped) {
+            return true;
+        }
+    }
+
+    if let Some(beard_id) = appearance.beard {
+        let beard = &database.hairs[beard_id];
+        if texture_hit_at(database, &beard.texture, position.value, point, appearance.is_flipped) {
+            return true;
+        }
+    }
+
+    if let Some(hair_id) = appearance.hair {
+        let hair = &database.hairs[hair_id];
+        let hair_x = if appearance.is_flipped {
+            position.value.x + body.texture.width() - hair.offset.x - hair.texture.width()
+        } else {
+            position.value.x + hair.offset.x
+        };
+        if texture_hit_at(
+            database,
+            &hair.texture,
+            vec2(hair_x, position.value.y + hair.offset.y),
+            point,
+            appearance.is_flipped,
+        ) {
+            return true;
+        }
+    }
+
+    false
+}
 
 pub fn is_blocked(world: &World, position: Vec2) -> bool {
     let cell = position / utils::TILE_SIZE;

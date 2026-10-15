@@ -4,6 +4,7 @@ use macroquad::{color, prelude::*};
 use crate::body::{Sprite, SpriteOverlay};
 use crate::database::Database;
 use crate::inventory::{INVENTORY_SLOT_COUNT, Inventory};
+use crate::health::{Health, MAX_HEALTH};
 use crate::movement::{BezierMovement, MOVEMENT_SPEED, Position, RandomWalker};
 use crate::objects::{Chest, OnOffSprite, Solid, Tree};
 use crate::player;
@@ -24,16 +25,22 @@ pub async fn spawn_entities(world: &mut World, database: &Database) {
         .get("./content/creatures/horse.png")
         .expect("horse texture not found")
         .clone();
+
     let saddle_texture = database
         .textures
         .get("./content/creatures/saddle.png")
         .expect("saddle texture not found")
         .clone();
+    let horse_sprite_offset = vec2(
+        (TILE_SIZE - horse_texture.width()) * 0.5,
+        (TILE_SIZE - horse_texture.height()),
+    );
 
     world.spawn((
+        Health::new(MAX_HEALTH),
         Position {
             value: cell_to_world(3, 2),
-            offset: vec2(0.0, -32.0),
+            offset: Vec2::ZERO,
         },
         BezierMovement {
             p0: cell_to_world(3, 2),
@@ -47,13 +54,13 @@ pub async fn spawn_entities(world: &mut World, database: &Database) {
         Sprite {
             color: color::WHITE,
             texture: horse_texture,
-            offset: vec2(0.0, 0.0),
+            offset: horse_sprite_offset,
         },
         SpriteOverlay {
             sprite: Sprite {
                 color: color::WHITE,
                 texture: saddle_texture,
-                offset: vec2(29.0, 47.0),
+                offset: vec2(29.0, 47.0) + horse_sprite_offset,
             },
         },
     ));
@@ -148,7 +155,11 @@ fn spawn_trees(world: &mut World, database: &Database) {
                     },
                 },
                 Solid {},
-                Tree {},
+                Tree {
+                    hits: 0,
+                    fall: None,
+                    felled: false,
+                },
             ));
         }
     }

@@ -4,8 +4,9 @@ use macroquad::math::{Rect, vec2};
 use crate::inventory::{
     Equipment, Inventory, ItemRef, INVENTORY_SLOT_COUNT, MAX_INVENTORY_WEIGHT_KG,
 };
-use crate::movement::{Position, BezierMovement, MOVEMENT_SPEED};
+use crate::movement::{AttackAction, Position, BezierMovement, MOVEMENT_SPEED};
 use crate::body::{Body, Appearence};
+use crate::health::{Health, MAX_HEALTH};
 use crate::input::Input;
 
 pub struct Player {}
@@ -47,6 +48,7 @@ pub fn spawn_player(world :&mut World){
 
     world.spawn((
         Player{},
+        Health::new(MAX_HEALTH),
         Position {
             value : vec2(0.0, 0.0),
             offset : vec2(0.0, -32.0)
@@ -58,6 +60,15 @@ pub fn spawn_player(world :&mut World){
             t : 0.0,
             has_started : false,
             speed : MOVEMENT_SPEED,
+        },
+        AttackAction {
+            origin: vec2(0.0, 0.0),
+            target: vec2(0.0, 0.0),
+            target_entity: None,
+            path: Vec::new(),
+            returning: false,
+            striking: false,
+            active: false,
         },
         Appearence {
             is_flipped : false,

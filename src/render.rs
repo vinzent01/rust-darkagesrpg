@@ -2,15 +2,42 @@ use macroquad::prelude::*;
 use hecs::{Entity, World};
 
 use crate::database::Database;
+use crate::health::Health;
 use crate::movement::Position;
 use crate::objects::{OnOffSprite, Tree};
 use crate::tilemap::*;
 use crate::utils;
 use crate::body::{Appearence, Sprite, SpriteOverlay};
 use crate::inventory::{Equipment, EquipmentSlot};
+use crate::input;
 
-pub fn draw_entities(world: &World, database: &Database, camera: &Camera2D) {
+pub fn create_outline_material() -> Result<Material, macroquad::Error> {
+    load_material(
+        ShaderSource::Glsl {
+            vertex: include_str!("../content/shaders/outline.vs"),
+            fragment: include_str!("../content/shaders/outline.fs"),
+        },
+        MaterialParams {
+            uniforms: vec![UniformDesc::new("outlineColor", UniformType::Float4)],
+            ..Default::default()
+        },
+    )
+}
+
+pub fn draw_entities(
+    world: &World,
+    database: &Database,
+    camera: &Camera2D,
+    outline_material: &Material,
+    show_sprite_hitboxes: bool,
+) {
     let camera_bounds = camera_world_bounds(camera);
+    let selected_entity = input::attack_target_at_cursor(world, database, camera);
+    let outline_color = if input::attack_mode_active() {
+        RED
+    } else {
+        WHITE
+    };
     let mut render_order: Vec<(f32, Entity)> = world
         .query::<(Entity, &Position)>()
         .iter()
@@ -32,11 +59,62 @@ pub fn draw_entities(world: &World, database: &Database, camera: &Camera2D) {
             .get::<&Position>(entity)
             .expect("render entity position disappeared");
 
+        if selected_entity == Some(entity) {
+            draw_entity_outline(
+                world,
+                entity,
+                &position,
+                database,
+                outline_material,
+                outline_color,
+            );
+        }
+
         if let Ok(sprite) = world.get::<&Sprite>(entity) {
             draw_sprite(&sprite, &position);
         }
         if let Ok(overlay) = world.get::<&SpriteOverlay>(entity) {
-            draw_sprite(&overlay.sprite, &position);
+            if let Ok(tree) = world.get::<&Tree>(entity) {
+                if tree.felled {
+                    continue;
+                }
+                if let Some(fall) = &tree.fall {
+                    let x = position.value.x + position.offset.x + overlay.sprite.offset.x;
+                    let y = position.value.y + position.offset.y + overlay.sprite.offset.y;
+                    let rotation_direction = if fall.direction.x != 0.0 {
+                        fall.direction.x
+                    } else {
+                        fall.direction.y
+                    };
+                    let rotation_progress =
+                        (fall.elapsed / crate::objects::TREE_FALL_ROTATION_DURATION)
+                            .clamp(0.0, 1.0);
+                    let fade_progress = ((fall.elapsed
+                        - crate::objects::TREE_FALL_ROTATION_DURATION)
+                        / crate::objects::TREE_FALL_FADE_DURATION)
+                        .clamp(0.0, 1.0);
+                    let mut color = overlay.sprite.color;
+                    color.a *= 1.0 - fade_progress;
+                    draw_texture_ex(
+                        &overlay.sprite.texture,
+                        x,
+                        y,
+                        color,
+                        DrawTextureParams {
+                            rotation: rotation_direction * 1.2 * rotation_progress,
+                            pivot: Some(vec2(
+                                x + overlay.sprite.texture.width() * 0.5,
+                                y + overlay.sprite.texture.height(),
+                            )),
+                            ..Default::default()
+                        },
+                    );
+                } else {
+                    draw_sprite(&overlay.sprite, &position);
+                }
+            } else {
+                draw_sprite(&overlay.sprite, &position);
+            }
         }
 
         if let Ok(sprite) = world.get::<&OnOffSprite>(entity) {
@@ -51,6 +129,112 @@ pub fn draw_entities(world: &World, database: &Database, camera: &Camera2D) {
             draw_appearence(&position, &appearence, &equipment, database);
         }
     }
+
+    draw_health_indicators(world, database);
+    if show_sprite_hitboxes {
+        draw_sprite_hitboxes(world, database);
+    }
+}
+
+fn draw_entity_outline(
+    world: &World,
+    entity: Entity,
+    position: &Position,
+    database: &Database,
+    outline_material: &Material,
+    outline_color: Color,
+) {
+    if let Ok(sprite) = world.get::<&Sprite>(entity) {
+        draw_sprite_outline(&sprite, position, false, outline_material, outline_color);
+    }
+    let hide_tree_canopy = world
+        .get::<&Tree>(entity)
+        .is_ok_and(|tree| tree.fall.is_some() || tree.felled);
+    if !hide_tree_canopy {
+        if let Ok(overlay) = world.get::<&SpriteOverlay>(entity) {
+            draw_sprite_outline(
+                &overlay.sprite,
+                position,
+                false,
+                outline_material,
+                outline_color,
+            );
+        }
+    }
+    if let Ok(sprite) = world.get::<&OnOffSprite>(entity) {
+        let sprite = if sprite.is_on { &sprite.on } else { &sprite.off };
+        draw_sprite_outline(sprite, position, false, outline_material, outline_color);
+    }
+    if let Ok(appearance) = world.get::<&Appearence>(entity) {
+        let race = database
+            .races
+            .get(appearance.body.race)
+            .expect("character race not found");
+        let body = if appearance.body.genre {
+            &race.male_sprite
+        } else {
+            &race.female_sprite
+        };
+        draw_texture_outline(
+            &body.texture,
+            position.value.x + position.offset.x,
+            position.value.y + position.offset.y,
+            appearance.is_flipped,
+            outline_material,
+            outline_color,
+        );
+    }
+}
+
+fn draw_sprite_outline(
+    sprite: &Sprite,
+    position: &Position,
+    flip_x: bool,
+    outline_material: &Material,
+    outline_color: Color,
+) {
+    draw_texture_outline(
+        &sprite.texture,
+        position.value.x + position.offset.x + sprite.offset.x,
+        position.value.y + position.offset.y + sprite.offset.y,
+        flip_x,
+        outline_material,
+        outline_color,
+    );
+}
+
+fn draw_texture_outline(
+    texture: &Texture2D,
+    x: f32,
+    y: f32,
+    flip_x: bool,
+    outline_material: &Material,
+    outline_color: Color,
+) {
+    outline_material.set_uniform("outlineColor", outline_color);
+    gl_use_material(outline_material);
+    for (dx, dy) in [
+        (-1.0, -1.0),
+        (0.0, -1.0),
+        (1.0, -1.0),
+        (-1.0, 0.0),
+        (1.0, 0.0),
+        (-1.0, 1.0),
+        (0.0, 1.0),
+        (1.0, 1.0),
+    ] {
+        draw_texture_ex(
+            texture,
+            x + dx,
+            y + dy,
+            WHITE,
+            DrawTextureParams {
+                flip_x,
+                ..Default::default()
+            },
+        );
+    }
+    gl_use_default_material();
 }
 
 fn camera_world_bounds(camera: &Camera2D) -> Rect {
@@ -93,6 +277,187 @@ fn draw_sprite(sprite: &Sprite, position: &Position) {
         position.value.y + position.offset.y + sprite.offset.y,
         sprite.color,
     );
+}
+
+fn draw_health_indicators(world: &World, database: &Database) {
+    for (entity, position, health) in world.query::<(Entity, &Position, &Health)>().iter() {
+        let base_x = position.value.x + position.offset.x;
+        let base_y = position.value.y + position.offset.y;
+        let mut left = base_x;
+        let mut right = base_x;
+        let mut top = base_y;
+
+        let mut include_sprite = |sprite: &Sprite| {
+            let sprite_x = base_x + sprite.offset.x;
+            let sprite_y = base_y + sprite.offset.y;
+            left = left.min(sprite_x);
+            right = right.max(sprite_x + sprite.texture.width());
+            top = top.min(sprite_y);
+        };
+
+        if let Ok(sprite) = world.get::<&Sprite>(entity) {
+            include_sprite(&sprite);
+        }
+        if let Ok(overlay) = world.get::<&SpriteOverlay>(entity) {
+            include_sprite(&overlay.sprite);
+        }
+        if let Ok(on_off) = world.get::<&OnOffSprite>(entity) {
+            include_sprite(if on_off.is_on { &on_off.on } else { &on_off.off });
+        }
+        if let Ok(appearance) = world.get::<&Appearence>(entity) {
+            let race = database
+                .races
+                .get(appearance.body.race)
+                .expect("character race not found");
+            let body = if appearance.body.genre {
+                &race.male_sprite
+            } else {
+                &race.female_sprite
+            };
+            right = right.max(base_x + body.texture.width());
+            top = top.min(base_y);
+        }
+
+        let label = format!("{}/{}", health.current, health.maximum);
+        let font_size = 16;
+        let dimensions = measure_text(&label, None, font_size, 1.0);
+        let x = (left + right - dimensions.width) * 0.5;
+        let y = top - 4.0;
+        draw_text(&label, x, y, font_size as f32, WHITE);
+    }
+}
+
+fn draw_sprite_hitboxes(world: &World, database: &Database) {
+    for (entity, position) in world.query::<(Entity, &Position)>().iter() {
+        if let Ok(sprite) = world.get::<&Sprite>(entity) {
+            draw_texture_hitbox(
+                &sprite.texture,
+                position.value.x + position.offset.x + sprite.offset.x,
+                position.value.y + position.offset.y + sprite.offset.y,
+            );
+        }
+        if let Ok(overlay) = world.get::<&SpriteOverlay>(entity) {
+            draw_texture_hitbox(
+                &overlay.sprite.texture,
+                position.value.x + position.offset.x + overlay.sprite.offset.x,
+                position.value.y + position.offset.y + overlay.sprite.offset.y,
+            );
+        }
+        if let Ok(on_off) = world.get::<&OnOffSprite>(entity) {
+            let sprite = if on_off.is_on {
+                &on_off.on
+            } else {
+                &on_off.off
+            };
+            draw_texture_hitbox(
+                &sprite.texture,
+                position.value.x + position.offset.x + sprite.offset.x,
+                position.value.y + position.offset.y + sprite.offset.y,
+            );
+        }
+        if let Ok(appearance) = world.get::<&Appearence>(entity) {
+            let equipment = world
+                .get::<&Equipment>(entity)
+                .expect("character equipment disappeared");
+            draw_appearance_hitboxes(&position, &appearance, &equipment, database);
+        }
+    }
+}
+
+fn draw_texture_hitbox(texture: &Texture2D, x: f32, y: f32) {
+    draw_rectangle_lines(x, y, texture.width(), texture.height(), 0.5, LIME);
+}
+
+fn draw_appearance_hitboxes(
+    position: &Position,
+    appearance: &Appearence,
+    equipment: &Equipment,
+    database: &Database,
+) {
+    let race = database
+        .races
+        .get(appearance.body.race)
+        .expect("character race not found");
+    let body = if appearance.body.genre {
+        &race.male_sprite
+    } else {
+        &race.female_sprite
+    };
+    let base_x = position.value.x + position.offset.x;
+    let base_y = position.value.y + position.offset.y;
+    draw_texture_hitbox(&body.texture, base_x, base_y);
+
+    for slot in [
+        EquipmentSlot::Legs,
+        EquipmentSlot::Torso,
+        EquipmentSlot::Feet,
+        EquipmentSlot::Head,
+        EquipmentSlot::OffHand,
+        EquipmentSlot::MainHand,
+    ] {
+        let Some(item_id) = equipment.items.get(&slot) else {
+            continue;
+        };
+        let item = database
+            .items
+            .get(item_id)
+            .expect("equipped item definition not found");
+        let Some(item_equipment) = &item.equipment else {
+            continue;
+        };
+        let texture_path = if appearance.body.genre {
+            &item_equipment.male_texture_path
+        } else {
+            &item_equipment.female_texture_path
+        };
+        let texture = database
+            .textures
+            .get(texture_path)
+            .expect("equipped item texture not found");
+        let offset_x = if appearance.is_flipped {
+            -item_equipment.offset.x
+        } else {
+            item_equipment.offset.x
+        };
+        let (x, y) = if matches!(slot, EquipmentSlot::MainHand | EquipmentSlot::OffHand) {
+            let is_main_hand = slot == EquipmentSlot::MainHand;
+            let is_on_right = is_main_hand != appearance.is_flipped;
+            let item_x = if is_on_right {
+                base_x + body.texture.width()
+            } else {
+                base_x - texture.width()
+            };
+            (
+                item_x + offset_x,
+                base_y + item_equipment.offset.y,
+            )
+        } else {
+            (
+                base_x + offset_x,
+                base_y + item_equipment.offset.y,
+            )
+        };
+        draw_texture_hitbox(texture, x, y);
+    }
+
+    if let Some(beard_id) = appearance.beard {
+        let beard = &database.hairs[beard_id];
+        draw_texture_hitbox(&beard.texture, position.value.x, position.value.y);
+    }
+
+    if let Some(hair_id) = appearance.hair {
+        let hair = &database.hairs[hair_id];
+        let hair_x = if appearance.is_flipped {
+            position.value.x + body.texture.width() - hair.offset.x - hair.texture.width()
+        } else {
+            position.value.x + hair.offset.x
+        };
+        draw_texture_hitbox(
+            &hair.texture,
+            hair_x,
+            position.value.y + hair.offset.y,
+        );
+    }
 }
 
 fn draw_appearence(

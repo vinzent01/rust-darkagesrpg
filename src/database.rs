@@ -1,6 +1,7 @@
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::{fs,};
-use std::{collections::HashMap, vec};
+use std::{fs, vec};
 use macroquad::prelude::*;
 
 use crate::body::{Race, Sprite, get_default_hair_color, get_default_skin_color};
@@ -13,7 +14,22 @@ pub struct Database {
     pub beards : Vec<Sprite>,
     pub races : HashMap<String, Race>,
     pub textures : HashMap<String, Texture2D>,
-    pub items : HashMap<String, Item>
+    pub items : HashMap<String, Item>,
+    texture_alpha: RefCell<HashMap<miniquad::TextureId, TextureAlpha>>,
+}
+
+struct TextureAlpha {
+    width: u16,
+    height: u16,
+    pixels: Vec<u8>,
+}
+
+impl TextureAlpha {
+    fn is_opaque(&self, x: u32, y: u32) -> bool {
+        x < u32::from(self.width)
+            && y < u32::from(self.height)
+            && self.pixels[(y * u32::from(self.width) + x) as usize] > 0
+    }
 }
 
 impl Database {
@@ -25,8 +41,32 @@ impl Database {
             hairs : vec![],
             races: HashMap::new(),
             textures : HashMap::new(),
-            items : HashMap::new()
+            items : HashMap::new(),
+            texture_alpha: RefCell::new(HashMap::new()),
         }
+    }
+
+    pub fn texture_pixel_is_opaque(&self, texture: &Texture2D, x: u32, y: u32) -> bool {
+        let texture_id = texture.raw_miniquad_id();
+        if !self.texture_alpha.borrow().contains_key(&texture_id) {
+            let image = texture.get_texture_data();
+            let alpha = image
+                .get_image_data()
+                .iter()
+                .map(|pixel| pixel[3])
+                .collect();
+            self.texture_alpha.borrow_mut().insert(
+                texture_id,
+                TextureAlpha {
+                    width: image.width,
+                    height: image.height,
+                    pixels: alpha,
+                },
+            );
+        }
+
+        let cache = self.texture_alpha.borrow();
+        cache[&texture_id].is_opaque(x, y)
     }
 
     pub async fn load(&mut self){
@@ -44,6 +84,13 @@ impl Database {
                 "Graveto",
                 0.1,
                 "./content/crafting-items/stick.png",
+                None,
+            ),
+            (
+                "wood",
+                "Madeira",
+                1.0,
+                "./content/vegetation/wood.png",
                 None,
             ),
             (
@@ -267,5 +314,26 @@ impl Database {
             },
         );
 
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TextureAlpha;
+
+    #[test]
+    fn texture_alpha_mask_only_hits_nontransparent_pixels() {
+        let mask = TextureAlpha {
+            width: 2,
+            height: 2,
+            pixels: vec![0, 1, 128, 255],
+        };
+
+        assert!(!mask.is_opaque(0, 0));
+        assert!(mask.is_opaque(1, 0));
+        assert!(mask.is_opaque(0, 1));
+        assert!(mask.is_opaque(1, 1));
+        assert!(!mask.is_opaque(2, 0));
+        assert!(!mask.is_opaque(0, 2));
     }
 }

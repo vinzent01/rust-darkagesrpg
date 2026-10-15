@@ -8,7 +8,7 @@ use crate::input;
 use crate::inventory;
 use crate::menu::{self, Menu};
 use crate::movement;
-use crate::objects;
+use crate::objects::{self, TreeSounds};
 use crate::render;
 use crate::spawner;
 use crate::utils;
@@ -29,6 +29,7 @@ pub fn update(
     zoom: &mut f32,
     turn_phase: &mut TurnPhase,
     menu: &mut Menu,
+    tree_sounds: &TreeSounds,
     dt: f32,
 ) {
     menu::update(menu);
@@ -41,12 +42,28 @@ pub fn update(
         input::camera_zoom(camera, zoom, dt);
     }
 
-    let picked_up_item = !ui_open && inventory::pick_up_ground_item(world, database, camera);
-    if !ui_open && !picked_up_item {
-        objects::interact_chest(world, camera);
+    let attack_mode = input::attack_mode_active();
+    objects::update_tree_falls(world, dt);
+    let attack_target = (!ui_open && *turn_phase == TurnPhase::Ready)
+        .then(|| input::attack_input(world, database, camera))
+        .flatten();
+
+    if attack_target.is_some() {
+        spawner::update_creature_spawners(world, database, camera);
+        movement::random_walking(world);
+        *turn_phase = TurnPhase::ActorsMoving;
+    } else if !ui_open && !attack_mode {
+        let picked_up_item = inventory::pick_up_ground_item(world, database, camera);
+        if !picked_up_item {
+            objects::interact_chest(world, camera);
+        }
     }
 
-    if !ui_open && *turn_phase == TurnPhase::Ready && input::movement_input(world) {
+    if !ui_open
+        && !attack_mode
+        && *turn_phase == TurnPhase::Ready
+        && input::movement_input(world)
+    {
         spawner::update_creature_spawners(world, database, camera);
         movement::random_walking(world);
         *turn_phase = TurnPhase::ActorsMoving;
@@ -57,6 +74,7 @@ pub fn update(
     }
 
     movement::bezier_movement(world, dt);
+    movement::advance_attack_actions(world, database, Some(tree_sounds));
     movement::flip_system(world);
     movement::camera_follow(world, camera);
 
@@ -65,11 +83,23 @@ pub fn update(
     }
 }
 
-pub fn draw_world(world: &World, database: &Database, camera: &Camera2D) {
+pub fn draw_world(
+    world: &World,
+    database: &Database,
+    camera: &Camera2D,
+    outline_material: &Material,
+    show_sprite_hitboxes: bool,
+) {
     clear_background(BLACK);
     render::draw_tilemap(world, database, camera);
     utils::draw_grid();
-    render::draw_entities(world, database, camera);
+    render::draw_entities(
+        world,
+        database,
+        camera,
+        outline_material,
+        show_sprite_hitboxes,
+    );
     inventory::draw_ground_items(world, database);
 }
 
@@ -78,6 +108,13 @@ pub fn draw_hud(world: &World, database: &Database, menu: &Menu) {
     chest_inventory::draw(world, database);
     inventory::draw_ground_stack_ui(world, database);
     menu::draw(menu);
+    if input::attack_mode_active() {
+        let width = 220.0;
+        let x = screen_width() - width - 12.0;
+        draw_rectangle(x, 12.0, width, 32.0, Color::from_rgba(100, 35, 25, 230));
+        draw_rectangle_lines(x, 12.0, width, 32.0, 1.0, ORANGE);
+        draw_text("MODO DE ATAQUE", x + 12.0, 34.0, 18.0, WHITE);
+    }
 }
 
 pub fn resize_camera(camera: &mut Camera2D, zoom: f32) {

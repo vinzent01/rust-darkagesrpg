@@ -73,6 +73,43 @@ pub fn get_item<'a>(item_ref: &ItemRef, database: &'a Database) -> Option<&'a It
     database.items.get(&item_ref.id)
 }
 
+pub fn add_item_to_player(world: &mut World, database: &Database, item: ItemRef) -> bool {
+    let Some(item_definition) = database.items.get(&item.id) else {
+        return false;
+    };
+    let item_weight = item_definition.weight * item.quantity as f32;
+    let Some(inventory_entity) = player_inventory_entity(world) else {
+        return false;
+    };
+    let Ok(mut inventory) = world.get::<&mut Inventory>(inventory_entity) else {
+        return false;
+    };
+
+    if inventory.weight + item_weight > inventory.max_weight {
+        return false;
+    }
+
+    let stored_item = if let Some(existing_item) = inventory
+        .items
+        .iter_mut()
+        .flatten()
+        .find(|existing_item| existing_item.id == item.id)
+    {
+        existing_item.quantity += item.quantity;
+        true
+    } else if let Some(empty_slot) = inventory.items.iter_mut().find(|slot| slot.is_none()) {
+        *empty_slot = Some(item);
+        true
+    } else {
+        false
+    };
+
+    if stored_item {
+        inventory.weight += item_weight;
+    }
+    stored_item
+}
+
 fn world_cell(position: Vec2) -> Vec2 {
     (position / TILE_SIZE).round() * TILE_SIZE
 }

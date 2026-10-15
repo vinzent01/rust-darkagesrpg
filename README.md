@@ -2,7 +2,7 @@
 
 Protótipo de jogo 2D em Rust com visual pixel art. O projeto explora movimentação em grade com animação, entidades que se movimentam por turnos, renderização de mapas e sprites, inventário e interação com objetos.
 
-> **Estado atual:** protótipo em desenvolvimento. O código já possui um ciclo jogável básico, mas sistemas como combate, crafting, salvamento e criação de personagem ainda não estão implementados.
+> **Estado atual:** protótipo em desenvolvimento. O código possui movimentação por turnos, combate corpo a corpo básico e coleta de recursos; crafting, salvamento e criação de personagem ainda não estão implementados.
 
 ## Índice
 
@@ -48,6 +48,9 @@ Os arquivos de `content/` são carregados por caminhos relativos ao diretório d
 | --- | --- |
 | `W`, `A`, `S`, `D` | Move o personagem |
 | Setas | Move o personagem |
+| `H` | Alterna a visualização dos hitboxes dos sprites |
+| Segurar `Shift` | Ativa o modo de ataque; clique em uma entidade para caminhar célula a célula e atacar corpo a corpo (20 de dano); vida atual/máxima aparece acima do jogador e das criaturas (100 máxima) |
+| Segurar `Shift` e clicar em uma árvore com machado de pedra equipado | Golpeia a árvore com som; após quatro golpes, a copa tomba com som de queda, depois desvanece e concede madeira |
 | `I` | Abre ou fecha o inventário |
 | Clique com o botão direito em uma roupa, ferramenta, arma ou escudo | Equipa ou desequipa o item; o inventário destaca os itens equipados |
 | Clique esquerdo em um baú | Abre o baú e seus painéis de armazenamento |
@@ -94,6 +97,7 @@ O movimento do jogador aceita as quatro direções cardeais e diagonais. O desti
 - O inventário inicial inclui túnica, calças e botas equipáveis. Clique com o botão direito em cada peça para equipá-la ou desequipá-la; a linha fica destacada e a roupa aparece sobre o personagem. Equipar outra peça do mesmo tipo substitui visualmente a anterior.
 - Picareta, machado de pedra e espada podem ser equipados na mão principal; o escudo ocupa a mão secundária. As armas e o escudo aparecem ao lado do personagem, trocando de lado com a orientação dele.
 - O limite de peso do jogador é 20 kg. O cabeçalho mostra o peso carregado e cada item mostra o peso por unidade e o peso total da pilha.
+- Árvores podem ser derrubadas com quatro golpes enquanto o machado de pedra estiver equipado; a madeira é adicionada ao inventário ou deixada no chão se não houver espaço.
 - O baú possui um inventário independente com 25 espaços e sem limite de peso; seu painel mostra o peso armazenado.
 - Com o baú aberto, é possível arrastar itens entre os painéis do jogador e do baú, ou soltar itens do baú no chão. Itens de uma pilha no chão também podem ser arrastados diretamente para o baú.
 - Os itens possuem identificador, nome, peso e caminho para a textura.

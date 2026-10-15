@@ -3,7 +3,8 @@ use macroquad::{color, prelude::*};
 
 use crate::body::Sprite;
 use crate::database::Database;
-use crate::movement::{BezierMovement, Position, RandomWalker, MOVEMENT_SPEED};
+use crate::health::{Health, MAX_HEALTH};
+use crate::movement::{AttackAction, BezierMovement, Position, RandomWalker, MOVEMENT_SPEED};
 use crate::player::Player;
 use crate::tilemap::{MAP_HEIGHT, MAP_WIDTH};
 use crate::utils::{cell_to_world, TILE_SIZE};
@@ -119,6 +120,14 @@ fn available_creature_spawn_cells(world: &World, camera: &Camera2D) -> Vec<Vec2>
     {
         occupied_cells.push((player_destination / TILE_SIZE).round());
     }
+    for (attack, _) in world.query::<(&AttackAction, &Player)>().iter() {
+        occupied_cells.extend(
+            attack
+                .path
+                .iter()
+                .map(|position| (*position / TILE_SIZE).round()),
+        );
+    }
 
     (-SPAWN_RADIUS..=SPAWN_RADIUS)
         .flat_map(|x| (-SPAWN_RADIUS..=SPAWN_RADIUS).map(move |y| (x, y)))
@@ -150,6 +159,7 @@ fn spawn_creature_at(world: &mut World, database: &Database, texture_path: &str,
         .clone();
 
     world.spawn((
+        Health::new(MAX_HEALTH),
         Position {
             value: position,
             offset: vec2(0.0, -32.0),

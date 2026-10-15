@@ -2,6 +2,7 @@ use hecs::{Entity, World};
 use macroquad::{color, prelude::*};
 
 use crate::database::Database;
+use crate::health::Health;
 use crate::inventory::{Equipment, GroundItem, Inventory, ItemRef};
 use crate::movement::Position;
 use crate::player::Player;
@@ -172,6 +173,10 @@ pub fn draw_inventory_ui(world : &World, database : &Database){
         .collect();
     let weight = inventory.weight;
     let max_weight = inventory.max_weight;
+    let health = world
+        .get::<&Health>(inventory_entity)
+        .map(|health| format!("Vida: {}/{}", health.current, health.maximum))
+        .ok();
     let equipped_items: Vec<String> = world
         .get::<&Equipment>(inventory_entity)
         .expect("player equipment disappeared")
@@ -197,6 +202,17 @@ pub fn draw_inventory_ui(world : &World, database : &Database){
             24.0,
             color::WHITE,
         );
+        if let Some(health) = &health {
+            let font_size = 16;
+            let text_width = measure_text(health, None, font_size, 1.0).width;
+            draw_text(
+                health,
+                rect.x + rect.w - INVENTORY_PADDING - text_width,
+                rect.y + 29.0,
+                font_size as f32,
+                color::WHITE,
+            );
+        }
         draw_text(
             &format!("Peso: {:.2} / {:.2} kg", weight, max_weight),
             rect.x + INVENTORY_PADDING,
