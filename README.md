@@ -49,6 +49,7 @@ Os arquivos de `content/` são carregados por caminhos relativos ao diretório d
 | `W`, `A`, `S`, `D` | Move o personagem |
 | Setas | Move o personagem |
 | `I` | Abre ou fecha o inventário |
+| Clique com o botão direito em uma roupa, ferramenta, arma ou escudo | Equipa ou desequipa o item; o inventário destaca os itens equipados |
 | Clique esquerdo em um baú | Abre o baú e seus painéis de armazenamento |
 | Clique e arraste no cabeçalho do inventário | Move a janela do inventário |
 | Clique e arraste em um item do inventário | Move ou empilha o item; arrastá-lo para fora solta-o no chão |
@@ -90,6 +91,8 @@ O movimento do jogador aceita as quatro direções cardeais e diagonais. O desti
 ### Inventário e itens
 
 - O inventário inicial tem 25 espaços exibidos como uma lista rolável; os espaços vazios também aparecem e podem receber itens.
+- O inventário inicial inclui túnica, calças e botas equipáveis. Clique com o botão direito em cada peça para equipá-la ou desequipá-la; a linha fica destacada e a roupa aparece sobre o personagem. Equipar outra peça do mesmo tipo substitui visualmente a anterior.
+- Picareta, machado de pedra e espada podem ser equipados na mão principal; o escudo ocupa a mão secundária. As armas e o escudo aparecem ao lado do personagem, trocando de lado com a orientação dele.
 - O limite de peso do jogador é 20 kg. O cabeçalho mostra o peso carregado e cada item mostra o peso por unidade e o peso total da pilha.
 - O baú possui um inventário independente com 25 espaços e sem limite de peso; seu painel mostra o peso armazenado.
 - Com o baú aberto, é possível arrastar itens entre os painéis do jogador e do baú, ou soltar itens do baú no chão. Itens de uma pilha no chão também podem ser arrastados diretamente para o baú.

@@ -7,6 +7,7 @@ use crate::objects::{OnOffSprite, Tree};
 use crate::tilemap::*;
 use crate::utils;
 use crate::body::{Appearence, Sprite, SpriteOverlay};
+use crate::inventory::{Equipment, EquipmentSlot};
 
 pub fn draw_entities(world: &World, database: &Database, camera: &Camera2D) {
     let camera_bounds = camera_world_bounds(camera);
@@ -44,7 +45,10 @@ pub fn draw_entities(world: &World, database: &Database, camera: &Camera2D) {
         }
 
         if let Ok(appearence) = world.get::<&Appearence>(entity) {
-            draw_appearence(&position, &appearence, database);
+            let equipment = world
+                .get::<&Equipment>(entity)
+                .expect("character equipment disappeared");
+            draw_appearence(&position, &appearence, &equipment, database);
         }
     }
 }
@@ -91,7 +95,12 @@ fn draw_sprite(sprite: &Sprite, position: &Position) {
     );
 }
 
-fn draw_appearence(position: &Position, appearence: &Appearence, database: &Database) {
+fn draw_appearence(
+    position: &Position,
+    appearence: &Appearence,
+    equipment: &Equipment,
+    database: &Database,
+) {
     let race = database
         .races
         .get(appearence.body.race)
@@ -112,6 +121,97 @@ fn draw_appearence(position: &Position, appearence: &Appearence, database: &Data
             ..Default::default()
         },
     );
+
+    for slot in [
+        EquipmentSlot::Legs,
+        EquipmentSlot::Torso,
+        EquipmentSlot::Feet,
+        EquipmentSlot::Head,
+    ] {
+        let Some(item_id) = equipment.items.get(&slot) else {
+            continue;
+        };
+        let item = database
+            .items
+            .get(item_id)
+            .expect("equipped item definition not found");
+        let Some(item_equipment) = &item.equipment else {
+            continue;
+        };
+        let texture_path = if appearence.body.genre {
+            &item_equipment.male_texture_path
+        } else {
+            &item_equipment.female_texture_path
+        };
+        let texture = database
+            .textures
+            .get(texture_path)
+            .expect("equipped item texture not found");
+        let offset_x = if appearence.is_flipped {
+            -item_equipment.offset.x
+        } else {
+            item_equipment.offset.x
+        };
+        draw_texture_ex(
+            texture,
+            position.value.x + position.offset.x + offset_x,
+            position.value.y + position.offset.y + item_equipment.offset.y,
+            WHITE,
+            DrawTextureParams {
+                flip_x: appearence.is_flipped,
+                ..Default::default()
+            },
+        );
+    }
+
+    let body_left = position.value.x + position.offset.x;
+    let body_top = position.value.y + position.offset.y;
+    let body_width = body_sprite.texture.width();
+    for (slot, is_main_hand) in [
+        (EquipmentSlot::OffHand, false),
+        (EquipmentSlot::MainHand, true),
+    ] {
+        let Some(item_id) = equipment.items.get(&slot) else {
+            continue;
+        };
+        let item = database
+            .items
+            .get(item_id)
+            .expect("equipped item definition not found");
+        let Some(item_equipment) = &item.equipment else {
+            continue;
+        };
+        let texture_path = if appearence.body.genre {
+            &item_equipment.male_texture_path
+        } else {
+            &item_equipment.female_texture_path
+        };
+        let texture = database
+            .textures
+            .get(texture_path)
+            .expect("equipped item texture not found");
+        let is_on_right = is_main_hand != appearence.is_flipped;
+        let item_x = if is_on_right {
+            body_left + body_width
+        } else {
+            body_left - texture.width()
+        };
+        let offset_x = if appearence.is_flipped {
+            -item_equipment.offset.x
+        } else {
+            item_equipment.offset.x
+        };
+        draw_texture_ex(
+            texture,
+            item_x + offset_x,
+            body_top + item_equipment.offset.y,
+            WHITE,
+            DrawTextureParams {
+                flip_x: appearence.is_flipped,
+                ..Default::default()
+            },
+        );
+    }
 
     if let Some(beard_id) = appearence.beard {
         let beard = &database.hairs[beard_id];

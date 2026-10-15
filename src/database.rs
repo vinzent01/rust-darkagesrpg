@@ -4,7 +4,7 @@ use std::{collections::HashMap, vec};
 use macroquad::prelude::*;
 
 use crate::body::{Race, Sprite, get_default_hair_color, get_default_skin_color};
-use crate::inventory::Item;
+use crate::inventory::{EquipmentSlot, Item, ItemEquipment};
 use crate::tilemap::{TileDefinition, TileId};
 
 pub struct Database {
@@ -38,24 +38,106 @@ impl Database {
     }
 
     fn register_items(&mut self) {
-        for (id, name, weight, texture_path) in [
+        for (id, name, weight, texture_path, equipment) in [
             (
                 "stick",
                 "Graveto",
                 0.1,
                 "./content/crafting-items/stick.png",
+                None,
             ),
             (
                 "stone_axe",
                 "Machado de pedra",
                 1.5,
                 "./content/melee weapons/stone-axe.png",
+                Some(ItemEquipment {
+                    slot: EquipmentSlot::MainHand,
+                    male_texture_path: "./content/melee weapons/stone-axe.png".to_string(),
+                    female_texture_path: "./content/melee weapons/stone-axe.png".to_string(),
+                    offset: vec2(-8.0, 2.0),
+                }),
             ),
             (
                 "pickaxe",
                 "Picareta",
                 2.0,
                 "./content/melee weapons/pickAxe.png",
+                Some(ItemEquipment {
+                    slot: EquipmentSlot::MainHand,
+                    male_texture_path: "./content/melee weapons/pickAxe.png".to_string(),
+                    female_texture_path: "./content/melee weapons/pickAxe.png".to_string(),
+                    offset: vec2(-8.0, 2.0),
+                }),
+            ),
+            (
+                "sword",
+                "Espada",
+                1.5,
+                "./content/melee weapons/sword.png",
+                Some(ItemEquipment {
+                    slot: EquipmentSlot::MainHand,
+                    male_texture_path: "./content/melee weapons/sword.png".to_string(),
+                    female_texture_path: "./content/melee weapons/sword.png".to_string(),
+                    offset: vec2(-8.0, 2.0),
+                }),
+            ),
+            (
+                "shield",
+                "Escudo",
+                2.0,
+                "./content/shield/shield.png",
+                Some(ItemEquipment {
+                    slot: EquipmentSlot::OffHand,
+                    male_texture_path: "./content/shield/shield.png".to_string(),
+                    female_texture_path: "./content/shield/shield.png".to_string(),
+                    offset: vec2(20.0, 8.0),
+                }),
+            ),
+            (
+                "linen_tunic",
+                "Tunica de linho",
+                0.5,
+                "./content/male clothes/male linen clothes/linen tunic/linen_tunic.png",
+                Some(ItemEquipment {
+                    slot: EquipmentSlot::Torso,
+                    male_texture_path:
+                        "./content/male clothes/male linen clothes/linen tunic/linen_tunic.png"
+                            .to_string(),
+                    female_texture_path:
+                        "./content/female clothes/linen cothes/linen-tunic.png".to_string(),
+                    offset: vec2(0.0, 0.0),
+                }),
+            ),
+            (
+                "linen_pants",
+                "Calcas de linho",
+                0.4,
+                "./content/male clothes/male linen clothes/linen pants/linen_pants.png",
+                Some(ItemEquipment {
+                    slot: EquipmentSlot::Legs,
+                    male_texture_path:
+                        "./content/male clothes/male linen clothes/linen pants/linen_pants.png"
+                            .to_string(),
+                    female_texture_path:
+                        "./content/female clothes/linen cothes/linen-pants.png".to_string(),
+                    offset: vec2(0.0, 0.0),
+                }),
+            ),
+            (
+                "leather_boots",
+                "Botas de couro",
+                0.3,
+                "./content/male clothes/leather armor/leather boots/leather_boots.png",
+                Some(ItemEquipment {
+                    slot: EquipmentSlot::Feet,
+                    male_texture_path:
+                        "./content/male clothes/leather armor/leather boots/leather_boots.png"
+                            .to_string(),
+                    female_texture_path:
+                        "./content/female clothes/leather armor/leather-boots.png".to_string(),
+                    offset: vec2(0.0, 0.0),
+                }),
             ),
         ] {
             self.items.insert(
@@ -65,6 +147,7 @@ impl Database {
                     name: name.to_string(),
                     weight,
                     texture_path: texture_path.to_string(),
+                    equipment,
                 },
             );
         }

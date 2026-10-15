@@ -1,5 +1,6 @@
 use hecs::{Entity, World};
 use macroquad::prelude::*;
+use std::collections::HashMap;
 
 use crate::database::Database;
 use crate::chest_inventory;
@@ -31,6 +32,29 @@ pub struct Item{
     pub name : String,
     pub weight : f32,
     pub texture_path: String,
+    pub equipment: Option<ItemEquipment>,
+}
+
+#[derive(Clone, Copy, Eq, Hash, PartialEq)]
+pub enum EquipmentSlot {
+    Feet,
+    Legs,
+    Torso,
+    Head,
+    MainHand,
+    OffHand,
+}
+
+pub struct ItemEquipment {
+    pub slot: EquipmentSlot,
+    pub male_texture_path: String,
+    pub female_texture_path: String,
+    pub offset: Vec2,
+}
+
+#[derive(Default)]
+pub struct Equipment {
+    pub items: HashMap<EquipmentSlot, String>,
 }
 
 pub struct GroundItem {

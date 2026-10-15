@@ -2,7 +2,7 @@ use hecs::{Entity, World};
 use macroquad::{color, prelude::*};
 
 use crate::database::Database;
-use crate::inventory::{GroundItem, Inventory, ItemRef};
+use crate::inventory::{Equipment, GroundItem, Inventory, ItemRef};
 use crate::movement::Position;
 use crate::player::Player;
 
@@ -172,6 +172,13 @@ pub fn draw_inventory_ui(world : &World, database : &Database){
         .collect();
     let weight = inventory.weight;
     let max_weight = inventory.max_weight;
+    let equipped_items: Vec<String> = world
+        .get::<&Equipment>(inventory_entity)
+        .expect("player equipment disappeared")
+        .items
+        .values()
+        .cloned()
+        .collect();
 
     for inv in world.query::<&UIInventory>().iter() {
         let rect = inv.rect;
@@ -197,6 +204,13 @@ pub fn draw_inventory_ui(world : &World, database : &Database){
             18.0,
             if weight >= max_weight { RED } else { LIGHTGRAY },
         );
+        draw_text(
+            "Botao direito em uma peca para equipar",
+            rect.x + INVENTORY_PADDING,
+            rect.y + 75.0,
+            12.0,
+            LIGHTGRAY,
+        );
 
         let visible_rows = inventory_visible_rows(rect);
         for row in 0..visible_rows {
@@ -205,13 +219,30 @@ pub fn draw_inventory_ui(world : &World, database : &Database){
                 break;
             }
             let row_y = inventory_list_top(rect) + row as f32 * INVENTORY_ROW_HEIGHT;
+            let item_is_equipped = items[item_index]
+                .as_ref()
+                .is_some_and(|(item_id, _)| equipped_items.contains(item_id));
             draw_rectangle(
                 rect.x + INVENTORY_PADDING,
                 row_y,
                 rect.w - INVENTORY_PADDING * 2.0,
                 INVENTORY_ROW_HEIGHT - 3.0,
-                Color::from_rgba(55, 55, 55, 255),
+                if item_is_equipped {
+                    Color::from_rgba(42, 75, 48, 255)
+                } else {
+                    Color::from_rgba(55, 55, 55, 255)
+                },
             );
+            if item_is_equipped {
+                draw_rectangle_lines(
+                    rect.x + INVENTORY_PADDING,
+                    row_y,
+                    rect.w - INVENTORY_PADDING * 2.0,
+                    INVENTORY_ROW_HEIGHT - 3.0,
+                    1.0,
+                    GREEN,
+                );
+            }
 
             if let Some((item_id, quantity)) = &items[item_index] {
                 let item = database
@@ -233,6 +264,15 @@ pub fn draw_inventory_ui(world : &World, database : &Database){
                     },
                 );
                 draw_text(&item.name, rect.x + 56.0, row_y + 19.0, 17.0, color::WHITE);
+                if item_is_equipped {
+                    draw_text(
+                        "EQUIPADO",
+                        rect.x + rect.w - 124.0,
+                        row_y + 18.0,
+                        12.0,
+                        GREEN,
+                    );
+                }
                 draw_text(
                     &format!(
                         "{} x {:.2} kg (total {:.2} kg)",
@@ -336,6 +376,43 @@ fn update_inventory_ui(world: &mut World, database: &Database) {
         .get::<&UIInventory>(ui_entity)
         .map(|ui| ui.scroll)
         .unwrap_or(scroll);
+
+    if is_mouse_button_pressed(MouseButton::Right) {
+        if let Some(slot_index) = slot_at_position(rect, scroll, item_count, mouse_pos) {
+            let item = world
+                .get::<&Inventory>(
+                    player_inventory_entity(world).expect("player inventory must be initialized"),
+                )
+                .ok()
+                .and_then(|inventory| inventory.items.get(slot_index).cloned())
+                .flatten();
+
+            if let Some(item) = item {
+                let definition = database
+                    .items
+                    .get(&item.id)
+                    .expect("inventory item definition not found");
+                if let Some(item_equipment) = &definition.equipment {
+                    let inventory_entity =
+                        player_inventory_entity(world).expect("player inventory must be initialized");
+                    let mut equipment = world
+                        .get::<&mut Equipment>(inventory_entity)
+                        .expect("player equipment disappeared");
+                    if equipment
+                        .items
+                        .get(&item_equipment.slot)
+                        .is_some_and(|equipped_item_id| equipped_item_id == &item.id)
+                    {
+                        equipment.items.remove(&item_equipment.slot);
+                    } else {
+                        equipment
+                            .items
+                            .insert(item_equipment.slot, item.id);
+                    }
+                }
+            }
+        }
+    }
 
     if is_mouse_button_pressed(MouseButton::Left) {
         if let Some(slot_index) = slot_at_position(rect, scroll, item_count, mouse_pos) {

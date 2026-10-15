@@ -2,7 +2,7 @@ use hecs::World;
 use macroquad::math::{Rect, vec2};
 
 use crate::inventory::{
-    Inventory, ItemRef, INVENTORY_SLOT_COUNT, MAX_INVENTORY_WEIGHT_KG,
+    Equipment, Inventory, ItemRef, INVENTORY_SLOT_COUNT, MAX_INVENTORY_WEIGHT_KG,
 };
 use crate::movement::{Position, BezierMovement, MOVEMENT_SPEED};
 use crate::body::{Body, Appearence};
@@ -22,6 +22,26 @@ pub fn spawn_player(world :&mut World){
     });
     items[2] = Some(ItemRef {
         id: "pickaxe".to_string(),
+        quantity: 1,
+    });
+    items[3] = Some(ItemRef {
+        id: "linen_tunic".to_string(),
+        quantity: 1,
+    });
+    items[4] = Some(ItemRef {
+        id: "linen_pants".to_string(),
+        quantity: 1,
+    });
+    items[5] = Some(ItemRef {
+        id: "leather_boots".to_string(),
+        quantity: 1,
+    });
+    items[6] = Some(ItemRef {
+        id: "sword".to_string(),
+        quantity: 1,
+    });
+    items[7] = Some(ItemRef {
+        id: "shield".to_string(),
         quantity: 1,
     });
 
@@ -49,6 +69,7 @@ pub fn spawn_player(world :&mut World){
             hair : Some(0)
         },
         Input,
+        Equipment::default(),
         Inventory {
             items,
             weight: 4.0,
