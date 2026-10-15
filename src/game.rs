@@ -3,6 +3,7 @@ use macroquad::prelude::*;
 
 use crate::database::Database;
 use crate::chest_inventory;
+use crate::crafting;
 use crate::hud;
 use crate::input;
 use crate::inventory;
@@ -36,7 +37,8 @@ pub fn update(
     let chest_open = chest_inventory::update(world, database);
     let inventory_open = hud::update_ui(world, database);
     let ground_stack_open = inventory::update_ground_stack_ui(world, database, camera);
-    let ui_open = chest_open || inventory_open || ground_stack_open;
+    let crafting_open = crafting::update(world, database);
+    let ui_open = chest_open || inventory_open || ground_stack_open || crafting_open;
 
     if !ui_open {
         input::camera_zoom(camera, zoom, dt);
@@ -115,6 +117,7 @@ pub fn draw_hud(world: &World, database: &Database, menu: &Menu) {
         draw_rectangle_lines(x, 12.0, width, 32.0, 1.0, ORANGE);
         draw_text("MODO DE ATAQUE", x + 12.0, 34.0, 18.0, WHITE);
     }
+    crafting::draw(world, database);
 }
 
 pub fn resize_camera(camera: &mut Camera2D, zoom: f32) {

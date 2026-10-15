@@ -2,7 +2,7 @@
 
 Protótipo de jogo 2D em Rust com visual pixel art. O projeto explora movimentação em grade com animação, entidades que se movimentam por turnos, renderização de mapas e sprites, inventário e interação com objetos.
 
-> **Estado atual:** protótipo em desenvolvimento. O código possui movimentação por turnos, combate corpo a corpo básico e coleta de recursos; crafting, salvamento e criação de personagem ainda não estão implementados.
+> **Estado atual:** protótipo em desenvolvimento. O código possui movimentação por turnos, combate corpo a corpo básico, coleta de recursos e crafting básico; salvamento e criação de personagem ainda não estão implementados.
 
 ## Índice
 
@@ -52,6 +52,7 @@ Os arquivos de `content/` são carregados por caminhos relativos ao diretório d
 | Segurar `Shift` | Ativa o modo de ataque; clique em uma entidade para caminhar célula a célula e atacar corpo a corpo (20 de dano); vida atual/máxima aparece acima do jogador e das criaturas (100 máxima) |
 | Segurar `Shift` e clicar em uma árvore ou toco com machado de pedra equipado | Golpeia a árvore com som; após quatro golpes, a copa tomba com som de queda, depois desvanece e concede madeira. Um golpe adicional remove o toco e concede mais 1 madeira |
 | `I` | Abre ou fecha o inventário |
+| `C` | Abre ou fecha a interface de crafting; selecione uma receita e craftar se possuir os materiais |
 | Clique com o botão direito em uma roupa, ferramenta, arma ou escudo | Equipa ou desequipa o item; o inventário destaca os itens equipados |
 | Clique esquerdo em um baú | Abre o baú e seus painéis de armazenamento |
 | Clique e arraste no cabeçalho do inventário | Move a janela do inventário |
@@ -108,6 +109,10 @@ O movimento do jogador aceita as quatro direções cardeais e diagonais. O desti
 - Um item individual no chão pode ser recolhido clicando na sua célula; pilhas e itens individuais só podem ser acessados a até duas células do jogador.
 
 O conteúdo inicial do inventário é definido em `src/player.rs`; as definições e texturas dos itens são registradas em `src/database.rs`.
+
+### Crafting
+
+Cada item pode ter uma receita registrada junto à sua definição em `src/database.rs`. Pressione `C` para abrir a interface, navegar pela lista rolável e ver a descrição, os ingredientes e as quantidades disponíveis. A opção de craft consome os ingredientes e adiciona o resultado ao inventário apenas quando há materiais, espaço e peso suficientes.
 
 ### Criaturas
 
@@ -201,5 +206,5 @@ Para verificar a execução e os recursos visuais, inicie com `cargo run` a part
 - O mapa e os dados iniciais são criados no código, sem carregamento de fases editáveis.
 - Não há salvamento ou carregamento de progresso.
 - O painel de menu não pausa a simulação.
-- Não há combate, crafting, missões, diálogo ou progressão implementados.
+- Crafting, combate, missões, diálogo e progressão ainda são sistemas básicos ou incompletos.
 - Várias categorias de recursos ainda não estão ligadas a sistemas funcionais.

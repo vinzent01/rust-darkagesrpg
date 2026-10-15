@@ -30,9 +30,23 @@ pub struct Inventory{
 pub struct Item{
     pub id : String,
     pub name : String,
+    pub description: String,
     pub weight : f32,
     pub texture_path: String,
     pub equipment: Option<ItemEquipment>,
+    pub recipe: Option<Recipe>,
+}
+
+#[derive(Clone)]
+pub struct Recipe {
+    pub ingredients: Vec<RecipeIngredient>,
+    pub output_quantity: i32,
+}
+
+#[derive(Clone)]
+pub struct RecipeIngredient {
+    pub item_id: String,
+    pub quantity: i32,
 }
 
 #[derive(Clone, Copy, Eq, Hash, PartialEq)]
@@ -110,6 +124,97 @@ pub fn add_item_to_player(world: &mut World, database: &Database, item: ItemRef)
     stored_item
 }
 
+pub fn craft_item(world: &mut World, database: &Database, item_id: &str) -> Result<(), String> {
+    let item = database
+        .items
+        .get(item_id)
+        .ok_or_else(|| format!("Item desconhecido: {item_id}"))?;
+    let recipe = item
+        .recipe
+        .as_ref()
+        .ok_or_else(|| format!("O item {} nao possui receita.", item.name))?;
+    let output_quantity = recipe.output_quantity;
+    let output_weight = item.weight * output_quantity as f32;
+    let ingredients = recipe.ingredients.clone();
+    let inventory_entity = player_inventory_entity(world)
+        .ok_or_else(|| "Inventario do jogador nao encontrado.".to_string())?;
+    let mut inventory = world
+        .get::<&mut Inventory>(inventory_entity)
+        .map_err(|_| "Inventario do jogador indisponivel.".to_string())?;
+
+    let mut simulated_items: Vec<Option<(String, i32)>> = inventory
+        .items
+        .iter()
+        .map(|slot| {
+            slot.as_ref()
+                .map(|item_ref| (item_ref.id.clone(), item_ref.quantity))
+        })
+        .collect();
+    let mut consumed_weight = 0.0;
+
+    for ingredient in &ingredients {
+        let ingredient_definition = database
+            .items
+            .get(&ingredient.item_id)
+            .ok_or_else(|| format!("Ingrediente desconhecido: {}", ingredient.item_id))?;
+        let available: i32 = simulated_items
+            .iter()
+            .flatten()
+            .filter(|(id, _)| id == &ingredient.item_id)
+            .map(|(_, quantity)| *quantity)
+            .sum();
+        if available < ingredient.quantity {
+            return Err(format!(
+                "Materiais insuficientes: {} ({} / {}).",
+                ingredient_definition.name, available, ingredient.quantity
+            ));
+        }
+
+        let mut remaining = ingredient.quantity;
+        for slot in &mut simulated_items {
+            let Some((id, quantity)) = slot else {
+                continue;
+            };
+            if id != &ingredient.item_id {
+                continue;
+            }
+            let consumed = remaining.min(*quantity);
+            *quantity -= consumed;
+            remaining -= consumed;
+            consumed_weight += ingredient_definition.weight * consumed as f32;
+            if *quantity == 0 {
+                *slot = None;
+            }
+            if remaining == 0 {
+                break;
+            }
+        }
+    }
+
+    let resulting_weight = inventory.weight - consumed_weight + output_weight;
+    if resulting_weight > inventory.max_weight {
+        return Err("O inventario nao tem peso disponivel para o resultado.".to_string());
+    }
+
+    if let Some((_, quantity)) = simulated_items
+        .iter_mut()
+        .flatten()
+        .find(|(id, _)| id == item_id)
+    {
+        *quantity += output_quantity;
+    } else if let Some(empty_slot) = simulated_items.iter_mut().find(|slot| slot.is_none()) {
+        *empty_slot = Some((item_id.to_string(), output_quantity));
+    } else {
+        return Err("O inventario nao tem espaco para o resultado.".to_string());
+    }
+
+    for (slot, simulated_item) in inventory.items.iter_mut().zip(simulated_items) {
+        *slot = simulated_item.map(|(id, quantity)| ItemRef { id, quantity });
+    }
+    inventory.weight = resulting_weight;
+    Ok(())
+}
+
 fn world_cell(position: Vec2) -> Vec2 {
     (position / TILE_SIZE).round() * TILE_SIZE
 }
@@ -148,6 +253,97 @@ fn player_inventory_entity(world: &World) -> Option<Entity> {
         .iter()
         .next()
         .map(|(entity, _, _)| entity)
+}
+
+#[cfg(test)]
+mod crafting_tests {
+    use super::{Inventory, Item, ItemRef, Recipe, RecipeIngredient, craft_item};
+    use crate::database::Database;
+    use crate::player::Player;
+    use hecs::{Entity, World};
+    use macroquad::prelude::Rect;
+
+    fn test_database() -> Database {
+        let mut database = Database::new();
+        database.items.insert(
+            "wood".to_string(),
+            Item {
+                id: "wood".to_string(),
+                name: "Madeira".to_string(),
+                description: "Madeira.".to_string(),
+                weight: 1.0,
+                texture_path: String::new(),
+                equipment: None,
+                recipe: None,
+            },
+        );
+        database.items.insert(
+            "stick".to_string(),
+            Item {
+                id: "stick".to_string(),
+                name: "Graveto".to_string(),
+                description: "Graveto.".to_string(),
+                weight: 0.1,
+                texture_path: String::new(),
+                equipment: None,
+                recipe: Some(Recipe {
+                    ingredients: vec![RecipeIngredient {
+                        item_id: "wood".to_string(),
+                        quantity: 1,
+                    }],
+                    output_quantity: 2,
+                }),
+            },
+        );
+        database
+    }
+
+    fn test_world(wood_quantity: i32) -> (World, Entity) {
+        let mut world = World::new();
+        let player = world.spawn((
+            Player {},
+            Inventory {
+                items: vec![
+                    Some(ItemRef {
+                        id: "wood".to_string(),
+                        quantity: wood_quantity,
+                    }),
+                    None,
+                ],
+                weight: wood_quantity as f32,
+                max_weight: 20.0,
+                rect: Rect::new(0.0, 0.0, 100.0, 100.0),
+            },
+        ));
+        (world, player)
+    }
+
+    #[test]
+    fn crafting_consumes_materials_and_adds_the_recipe_output() {
+        let database = test_database();
+        let (mut world, player) = test_world(2);
+
+        assert!(craft_item(&mut world, &database, "stick").is_ok());
+
+        let inventory = world.get::<&Inventory>(player).unwrap();
+        assert_eq!(inventory.items[0].as_ref().unwrap().quantity, 1);
+        assert_eq!(inventory.items[1].as_ref().unwrap().id, "stick");
+        assert_eq!(inventory.items[1].as_ref().unwrap().quantity, 2);
+        assert!((inventory.weight - 1.2).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn failed_craft_does_not_consume_any_materials() {
+        let database = test_database();
+        let (mut world, player) = test_world(0);
+
+        assert!(craft_item(&mut world, &database, "stick").is_err());
+
+        let inventory = world.get::<&Inventory>(player).unwrap();
+        assert_eq!(inventory.items[0].as_ref().unwrap().quantity, 0);
+        assert!(inventory.items[1].is_none());
+        assert_eq!(inventory.weight, 0.0);
+    }
 }
 
 pub fn update_ground_stack_ui(

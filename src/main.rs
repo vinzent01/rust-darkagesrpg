@@ -3,6 +3,7 @@ use macroquad::prelude::*;
 
 mod body;
 mod chest_inventory;
+mod crafting;
 mod database;
 mod game;
 mod health;

@@ -6,7 +6,7 @@ use macroquad::prelude::*;
 
 use crate::body::{Race, Sprite, get_default_hair_color, get_default_skin_color};
 use crate::health::MAX_HEALTH;
-use crate::inventory::{EquipmentSlot, Item, ItemEquipment};
+use crate::inventory::{EquipmentSlot, Item, ItemEquipment, Recipe, RecipeIngredient};
 use crate::tilemap::{TileDefinition, TileId};
 
 pub struct Database {
@@ -118,24 +118,29 @@ impl Database {
     }
 
     fn register_items(&mut self) {
-        for (id, name, weight, texture_path, equipment) in [
+        for (id, name, description, weight, texture_path, equipment, recipe) in [
             (
                 "stick",
                 "Graveto",
+                "Um graveto simples usado para fabricar ferramentas.",
                 0.1,
                 "./content/crafting-items/stick.png",
                 None,
+                Some(recipe(&[("wood", 1)], 2)),
             ),
             (
                 "wood",
                 "Madeira",
+                "Madeira obtida de árvores e usada em receitas.",
                 1.0,
                 "./content/vegetation/wood.png",
+                None,
                 None,
             ),
             (
                 "stone_axe",
                 "Machado de pedra",
+                "Ferramenta para cortar árvores.",
                 1.5,
                 "./content/melee weapons/stone-axe.png",
                 Some(ItemEquipment {
@@ -144,10 +149,12 @@ impl Database {
                     female_texture_path: "./content/melee weapons/stone-axe.png".to_string(),
                     offset: vec2(-8.0, 2.0),
                 }),
+                Some(recipe(&[("stick", 2), ("wood", 3)], 1)),
             ),
             (
                 "pickaxe",
                 "Picareta",
+                "Ferramenta para minerar recursos.",
                 2.0,
                 "./content/melee weapons/pickAxe.png",
                 Some(ItemEquipment {
@@ -156,10 +163,12 @@ impl Database {
                     female_texture_path: "./content/melee weapons/pickAxe.png".to_string(),
                     offset: vec2(-8.0, 2.0),
                 }),
+                Some(recipe(&[("stick", 2), ("wood", 3)], 1)),
             ),
             (
                 "sword",
                 "Espada",
+                "Uma arma corpo a corpo.",
                 1.5,
                 "./content/melee weapons/sword.png",
                 Some(ItemEquipment {
@@ -168,10 +177,12 @@ impl Database {
                     female_texture_path: "./content/melee weapons/sword.png".to_string(),
                     offset: vec2(-8.0, 2.0),
                 }),
+                Some(recipe(&[("stick", 1), ("wood", 4)], 1)),
             ),
             (
                 "shield",
                 "Escudo",
+                "Um escudo leve para defesa.",
                 2.0,
                 "./content/shield/shield.png",
                 Some(ItemEquipment {
@@ -180,10 +191,12 @@ impl Database {
                     female_texture_path: "./content/shield/shield.png".to_string(),
                     offset: vec2(20.0, 8.0),
                 }),
+                Some(recipe(&[("wood", 4)], 1)),
             ),
             (
                 "linen_tunic",
                 "Tunica de linho",
+                "Uma tunica simples feita de linho.",
                 0.5,
                 "./content/male clothes/male linen clothes/linen tunic/linen_tunic.png",
                 Some(ItemEquipment {
@@ -195,10 +208,12 @@ impl Database {
                         "./content/female clothes/linen cothes/linen-tunic.png".to_string(),
                     offset: vec2(0.0, 0.0),
                 }),
+                None,
             ),
             (
                 "linen_pants",
                 "Calcas de linho",
+                "Calcas simples feitas de linho.",
                 0.4,
                 "./content/male clothes/male linen clothes/linen pants/linen_pants.png",
                 Some(ItemEquipment {
@@ -210,10 +225,12 @@ impl Database {
                         "./content/female clothes/linen cothes/linen-pants.png".to_string(),
                     offset: vec2(0.0, 0.0),
                 }),
+                None,
             ),
             (
                 "leather_boots",
                 "Botas de couro",
+                "Botas resistentes feitas de couro.",
                 0.3,
                 "./content/male clothes/leather armor/leather boots/leather_boots.png",
                 Some(ItemEquipment {
@@ -225,6 +242,7 @@ impl Database {
                         "./content/female clothes/leather armor/leather-boots.png".to_string(),
                     offset: vec2(0.0, 0.0),
                 }),
+                None,
             ),
         ] {
             self.items.insert(
@@ -232,11 +250,26 @@ impl Database {
                 Item {
                     id: id.to_string(),
                     name: name.to_string(),
+                    description: description.to_string(),
                     weight,
                     texture_path: texture_path.to_string(),
                     equipment,
+                    recipe,
                 },
             );
+        }
+
+        fn recipe(ingredients: &[(&str, i32)], output_quantity: i32) -> Recipe {
+            Recipe {
+                ingredients: ingredients
+                    .iter()
+                    .map(|(item_id, quantity)| RecipeIngredient {
+                        item_id: (*item_id).to_string(),
+                        quantity: *quantity,
+                    })
+                    .collect(),
+                output_quantity,
+            }
         }
     }
 
@@ -402,5 +435,25 @@ mod tests {
             assert_eq!(creature.spawn_weight, spawn_weight);
             assert!(!creature.name.is_empty());
         }
+    }
+
+    #[test]
+    fn registered_crafting_recipes_reference_valid_items() {
+        let mut database = Database::new();
+        database.register_items();
+
+        let mut recipe_count = 0;
+        for item in database.items.values() {
+            assert!(!item.description.is_empty());
+            if let Some(recipe) = &item.recipe {
+                recipe_count += 1;
+                assert!(recipe.output_quantity > 0);
+                for ingredient in &recipe.ingredients {
+                    assert!(database.items.contains_key(&ingredient.item_id));
+                    assert!(ingredient.quantity > 0);
+                }
+            }
+        }
+        assert_eq!(recipe_count, 5);
     }
 }

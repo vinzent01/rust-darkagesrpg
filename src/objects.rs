@@ -362,9 +362,11 @@ mod tests {
             Item {
                 id: "wood".to_string(),
                 name: "Madeira".to_string(),
+                description: "Madeira obtida de arvores.".to_string(),
                 weight: 1.0,
                 texture_path: "./content/vegetation/wood.png".to_string(),
                 equipment: None,
+                recipe: None,
             },
         );
         let player = world.spawn((
