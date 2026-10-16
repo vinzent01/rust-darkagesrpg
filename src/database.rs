@@ -1,8 +1,8 @@
+use macroquad::prelude::*;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::{fs, vec};
-use macroquad::prelude::*;
 
 use crate::body::{Race, Sprite, get_default_hair_color, get_default_skin_color};
 use crate::health::MAX_HEALTH;
@@ -10,12 +10,12 @@ use crate::inventory::{EquipmentSlot, Item, ItemEquipment, Recipe, RecipeIngredi
 use crate::tilemap::{TileDefinition, TileId};
 
 pub struct Database {
-    pub tiles : HashMap<TileId, TileDefinition>,
-    pub hairs : Vec<Sprite>,
-    pub beards : Vec<Sprite>,
-    pub races : HashMap<String, Race>,
-    pub textures : HashMap<String, Texture2D>,
-    pub items : HashMap<String, Item>,
+    pub tiles: HashMap<TileId, TileDefinition>,
+    pub hairs: Vec<Sprite>,
+    pub beards: Vec<Sprite>,
+    pub races: HashMap<String, Race>,
+    pub textures: HashMap<String, Texture2D>,
+    pub items: HashMap<String, Item>,
     pub creatures: HashMap<String, CreatureDefinition>,
     texture_alpha: RefCell<HashMap<miniquad::TextureId, TextureAlpha>>,
 }
@@ -43,15 +43,14 @@ impl TextureAlpha {
 }
 
 impl Database {
-
-    pub fn new() -> Self{
-        Self { 
+    pub fn new() -> Self {
+        Self {
             tiles: HashMap::new(),
-            beards : vec![],
-            hairs : vec![],
+            beards: vec![],
+            hairs: vec![],
             races: HashMap::new(),
-            textures : HashMap::new(),
-            items : HashMap::new(),
+            textures: HashMap::new(),
+            items: HashMap::new(),
             creatures: HashMap::new(),
             texture_alpha: RefCell::new(HashMap::new()),
         }
@@ -80,7 +79,7 @@ impl Database {
         cache[&texture_id].is_opaque(x, y)
     }
 
-    pub async fn load(&mut self){
+    pub async fn load(&mut self) {
         self.register_textures().await;
         self.register_tiles().await;
         self.register_hairs().await;
@@ -134,6 +133,15 @@ impl Database {
                 "Madeira obtida de árvores e usada em receitas.",
                 1.0,
                 "./content/vegetation/wood.png",
+                None,
+                None,
+            ),
+            (
+                "stone",
+                "Pedra",
+                "Pedra coletada do chão.",
+                1.0,
+                "./content/vegetation/stone.png",
                 None,
                 None,
             ),
@@ -204,8 +212,8 @@ impl Database {
                     male_texture_path:
                         "./content/male clothes/male linen clothes/linen tunic/linen_tunic.png"
                             .to_string(),
-                    female_texture_path:
-                        "./content/female clothes/linen cothes/linen-tunic.png".to_string(),
+                    female_texture_path: "./content/female clothes/linen cothes/linen-tunic.png"
+                        .to_string(),
                     offset: vec2(0.0, 0.0),
                 }),
                 None,
@@ -221,8 +229,8 @@ impl Database {
                     male_texture_path:
                         "./content/male clothes/male linen clothes/linen pants/linen_pants.png"
                             .to_string(),
-                    female_texture_path:
-                        "./content/female clothes/linen cothes/linen-pants.png".to_string(),
+                    female_texture_path: "./content/female clothes/linen cothes/linen-pants.png"
+                        .to_string(),
                     offset: vec2(0.0, 0.0),
                 }),
                 None,
@@ -238,8 +246,8 @@ impl Database {
                     male_texture_path:
                         "./content/male clothes/leather armor/leather boots/leather_boots.png"
                             .to_string(),
-                    female_texture_path:
-                        "./content/female clothes/leather armor/leather-boots.png".to_string(),
+                    female_texture_path: "./content/female clothes/leather armor/leather-boots.png"
+                        .to_string(),
                     offset: vec2(0.0, 0.0),
                 }),
                 None,
@@ -301,7 +309,6 @@ impl Database {
                 .to_lowercase();
 
             if matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "bmp" | "tga") {
-
                 let path = path.to_string_lossy().replace("\\", "/");
 
                 let texture = load_texture(&path).await.unwrap();
@@ -312,46 +319,55 @@ impl Database {
         }
     }
 
-    pub async fn register_races(&mut self){
-        let female_texture = load_texture("./content/humans/body/female-body.png").await.unwrap();
+    pub async fn register_races(&mut self) {
+        let female_texture = load_texture("./content/humans/body/female-body.png")
+            .await
+            .unwrap();
         female_texture.set_filter(FilterMode::Nearest);
 
-        let male_texture = load_texture("./content/humans/body/male-body.png").await.unwrap();
+        let male_texture = load_texture("./content/humans/body/male-body.png")
+            .await
+            .unwrap();
         male_texture.set_filter(FilterMode::Nearest);
 
-        self.races.insert(String::from("human"), Race{
-            description : String::from("humans"),
-            name : String::from("human"),
-            female_sprite : Sprite { 
-                color: get_default_skin_color(), 
-                texture: female_texture,
-                offset: vec2(0.0, 0.0)
+        self.races.insert(
+            String::from("human"),
+            Race {
+                description: String::from("humans"),
+                name: String::from("human"),
+                female_sprite: Sprite {
+                    color: get_default_skin_color(),
+                    texture: female_texture,
+                    offset: vec2(0.0, 0.0),
+                },
+                male_sprite: Sprite {
+                    color: get_default_skin_color(),
+                    texture: male_texture,
+                    offset: vec2(0.0, 0.0),
+                },
+                default_skin_color: get_default_skin_color(),
+                default_hair_color: get_default_hair_color(),
             },
-            male_sprite : Sprite {
-                color: get_default_skin_color(), 
-                texture: male_texture,
-                offset: vec2(0.0, 0.0)
-            },
-            default_skin_color : get_default_skin_color(),
-            default_hair_color : get_default_hair_color()
-        });
-    }
-
-    pub async fn register_hairs(&mut self){
-        let texture = load_texture("./content/humans/hair/medium-hair.png").await.unwrap();
-        texture.set_filter(FilterMode::Nearest);
-
-        self.hairs.push(
-            Sprite { 
-                color: get_default_hair_color(), 
-                texture,
-                offset : vec2(8.0, -32.0)
-            }
         );
     }
 
-    pub async fn register_tiles(&mut self){
-        let grass_texture = load_texture("./content/vegetation/Grass.png").await.unwrap();
+    pub async fn register_hairs(&mut self) {
+        let texture = load_texture("./content/humans/hair/medium-hair.png")
+            .await
+            .unwrap();
+        texture.set_filter(FilterMode::Nearest);
+
+        self.hairs.push(Sprite {
+            color: get_default_hair_color(),
+            texture,
+            offset: vec2(8.0, -32.0),
+        });
+    }
+
+    pub async fn register_tiles(&mut self) {
+        let grass_texture = load_texture("./content/vegetation/Grass.png")
+            .await
+            .unwrap();
         grass_texture.set_filter(FilterMode::Nearest);
 
         self.tiles.insert(
@@ -363,7 +379,9 @@ impl Database {
             },
         );
 
-        let grass_object_texture = load_texture("./content/vegetation/grass-object.png").await.unwrap();
+        let grass_object_texture = load_texture("./content/vegetation/grass-object.png")
+            .await
+            .unwrap();
         grass_object_texture.set_filter(FilterMode::Nearest);
 
         self.tiles.insert(
@@ -386,7 +404,6 @@ impl Database {
                 solid: true,
             },
         );
-
     }
 }
 

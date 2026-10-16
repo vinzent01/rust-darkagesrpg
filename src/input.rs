@@ -1,14 +1,14 @@
-use hecs::{Entity, World};
-use macroquad::prelude::*;
-use crate::objects::{Solid, Tree};
 use crate::body::{Appearence, Sprite, SpriteOverlay};
 use crate::database::Database;
-use crate::player::Player;
-use crate::objects::OnOffSprite;
 use crate::inventory::{Equipment, EquipmentSlot};
-use crate::utils;
 use crate::movement::{BezierMovement, Position, RandomWalker};
+use crate::objects::OnOffSprite;
+use crate::objects::{self, Gatherable, Solid, Tree};
+use crate::player::Player;
 use crate::tilemap::{MAP_HEIGHT, MAP_WIDTH};
+use crate::utils;
+use hecs::{Entity, World};
+use macroquad::prelude::*;
 
 pub struct Input;
 
@@ -34,6 +34,21 @@ pub fn attack_input(world: &World, database: &Database, camera: &Camera2D) -> Op
         .then_some(target_entity)
 }
 
+pub fn gather_input(world: &mut World, database: &Database, camera: &Camera2D) -> bool {
+    if !is_mouse_button_pressed(MouseButton::Left) {
+        return false;
+    }
+
+    let Some(target_entity) = attack_target_at_cursor(world, database, camera) else {
+        return false;
+    };
+    if world.get::<&Gatherable>(target_entity).is_err() {
+        return false;
+    }
+
+    objects::collect_gatherable(world, database, target_entity)
+}
+
 fn player_has_stone_axe(world: &World) -> bool {
     world
         .query::<(&Player, &Equipment)>()
@@ -53,83 +68,95 @@ pub fn attack_target_at_cursor(
 ) -> Option<Entity> {
     let mouse = mouse_position();
     let mouse_world = camera.screen_to_world(vec2(mouse.0, mouse.1));
-    let mut candidates: Vec<(f32, Entity)> = world
-        .query::<(Entity, &Position)>()
-        .iter()
-        .filter(|(entity, _)| {
-            world.get::<&Player>(*entity).is_err()
-                && (world.get::<&Sprite>(*entity).is_ok()
-                    || world.get::<&SpriteOverlay>(*entity).is_ok()
-                    || world.get::<&OnOffSprite>(*entity).is_ok()
-                    || world.get::<&Appearence>(*entity).is_ok())
-        })
-        .map(|(entity, position)| (position.value.y, entity))
-        .collect();
-    candidates.sort_by(|(left_y, _), (right_y, _)| right_y.total_cmp(left_y));
-
-    for (_, entity) in candidates {
-        let Ok(position) = world.get::<&Position>(entity) else {
+    let mut selected = None;
+    for (entity, position) in world.query::<(Entity, &Position)>().iter() {
+        if selected.is_some_and(|(selected_y, _)| {
+            position.value.y.total_cmp(&selected_y) != std::cmp::Ordering::Greater
+        }) || !entity_hit_at(world, database, entity, &position, mouse_world)
+        {
             continue;
-        };
-        let tree_overlay_hidden = world
-            .get::<&Tree>(entity)
-            .is_ok_and(|tree| tree.fall.is_some() || tree.felled);
-        let sprite_hit = world
-            .get::<&Sprite>(entity)
-            .is_ok_and(|sprite| {
-                texture_hit_at(
-                    database,
-                    &sprite.texture,
-                    position.value + position.offset + sprite.offset,
-                    mouse_world,
-                    false,
-                )
-            })
-            || (!tree_overlay_hidden
-                && world
-                    .get::<&SpriteOverlay>(entity)
-                    .is_ok_and(|overlay| {
-                        texture_hit_at(
-                            database,
-                            &overlay.sprite.texture,
-                            position.value + position.offset + overlay.sprite.offset,
-                            mouse_world,
-                            false,
-                        )
-                    }))
-            || world
-                .get::<&OnOffSprite>(entity)
-                .is_ok_and(|sprite| {
-                    let sprite = if sprite.is_on { &sprite.on } else { &sprite.off };
-                    texture_hit_at(
-                        database,
-                        &sprite.texture,
-                        position.value + position.offset + sprite.offset,
-                        mouse_world,
-                        false,
-                    )
-                });
-        let appearance_hit = world
-            .get::<&Appearence>(entity)
-            .is_ok_and(|appearance| {
-                let equipment = world
-                    .get::<&Equipment>(entity)
-                    .expect("character equipment disappeared");
-                appearance_hit_at(
-                    database,
-                    &position,
-                    &appearance,
-                    &equipment,
-                    mouse_world,
-                )
-            });
-
-        if sprite_hit || appearance_hit {
-            return Some(entity);
         }
+
+        selected = Some((position.value.y, entity));
     }
 
-    None
+    selected.map(|(_, entity)| entity)
+}
+
+pub fn attack_target_at_cursor_visible(
+    world: &World,
+    database: &Database,
+    camera: &Camera2D,
+    visible_entities: &[(f32, Entity)],
+) -> Option<Entity> {
+    let mouse = mouse_position();
+    let mouse_world = camera.screen_to_world(vec2(mouse.0, mouse.1));
+
+    visible_entities.iter().rev().find_map(|&(_, entity)| {
+        let position = world.get::<&Position>(entity).ok()?;
+        entity_hit_at(world, database, entity, &position, mouse_world).then_some(entity)
+    })
+}
+
+fn entity_hit_at(
+    world: &World,
+    database: &Database,
+    entity: Entity,
+    position: &Position,
+    mouse_world: Vec2,
+) -> bool {
+    if world.get::<&Player>(entity).is_ok()
+        || (world.get::<&Sprite>(entity).is_err()
+            && world.get::<&SpriteOverlay>(entity).is_err()
+            && world.get::<&OnOffSprite>(entity).is_err()
+            && world.get::<&Appearence>(entity).is_err())
+    {
+        return false;
+    }
+
+    let tree_overlay_hidden = world
+        .get::<&Tree>(entity)
+        .is_ok_and(|tree| tree.fall.is_some() || tree.felled);
+    let sprite_hit = world.get::<&Sprite>(entity).is_ok_and(|sprite| {
+        texture_hit_at(
+            database,
+            &sprite.texture,
+            position.value + position.offset + sprite.offset,
+            mouse_world,
+            false,
+        )
+    }) || (!tree_overlay_hidden
+        && world.get::<&SpriteOverlay>(entity).is_ok_and(|overlay| {
+            texture_hit_at(
+                database,
+                &overlay.sprite.texture,
+                position.value + position.offset + overlay.sprite.offset,
+                mouse_world,
+                false,
+            )
+        }))
+        || world.get::<&OnOffSprite>(entity).is_ok_and(|sprite| {
+            let sprite = if sprite.is_on {
+                &sprite.on
+            } else {
+                &sprite.off
+            };
+            texture_hit_at(
+                database,
+                &sprite.texture,
+                position.value + position.offset + sprite.offset,
+                mouse_world,
+                false,
+            )
+        });
+    let appearance_hit = world.get::<&Appearence>(entity).is_ok_and(|appearance| {
+        let equipment = world
+            .get::<&Equipment>(entity)
+            .expect("character equipment disappeared");
+        appearance_hit_at(database, position, &appearance, &equipment, mouse_world)
+    });
+
+    sprite_hit || appearance_hit
 }
 
 fn texture_hit_at(
@@ -141,11 +168,7 @@ fn texture_hit_at(
 ) -> bool {
     let local_x = point.x - origin.x;
     let local_y = point.y - origin.y;
-    if local_x < 0.0
-        || local_y < 0.0
-        || local_x >= texture.width()
-        || local_y >= texture.height()
-    {
+    if local_x < 0.0 || local_y < 0.0 || local_x >= texture.width() || local_y >= texture.height() {
         return false;
     }
 
@@ -173,7 +196,13 @@ fn appearance_hit_at(
         &race.female_sprite
     };
     let body_origin = position.value + position.offset;
-    if texture_hit_at(database, &body.texture, body_origin, point, appearance.is_flipped) {
+    if texture_hit_at(
+        database,
+        &body.texture,
+        body_origin,
+        point,
+        appearance.is_flipped,
+    ) {
         return true;
     }
 
@@ -228,7 +257,13 @@ fn appearance_hit_at(
 
     if let Some(beard_id) = appearance.beard {
         let beard = &database.hairs[beard_id];
-        if texture_hit_at(database, &beard.texture, position.value, point, appearance.is_flipped) {
+        if texture_hit_at(
+            database,
+            &beard.texture,
+            position.value,
+            point,
+            appearance.is_flipped,
+        ) {
             return true;
         }
     }
@@ -256,11 +291,7 @@ fn appearance_hit_at(
 
 pub fn is_blocked(world: &World, position: Vec2) -> bool {
     let cell = position / utils::TILE_SIZE;
-    if cell.x < 0.0
-        || cell.y < 0.0
-        || cell.x >= MAP_WIDTH as f32
-        || cell.y >= MAP_HEIGHT as f32
-    {
+    if cell.x < 0.0 || cell.y < 0.0 || cell.x >= MAP_WIDTH as f32 || cell.y >= MAP_HEIGHT as f32 {
         return true;
     }
 
@@ -313,18 +344,14 @@ pub fn movement_input(world: &World) -> bool {
     false
 }
 
-
-pub fn camera_zoom(camera : &mut Camera2D, zoom : &mut f32, dt : f32){
+pub fn camera_zoom(camera: &mut Camera2D, zoom: &mut f32, dt: f32) {
     let (_, scroll) = mouse_wheel();
     const ZOOM_FACTOR: f32 = 1.1;
 
     if scroll != 0.0 {
-        *zoom *= ZOOM_FACTOR.powf(scroll*0.01);
+        *zoom *= ZOOM_FACTOR.powf(scroll * 0.01);
         *zoom = zoom.clamp(0.5, 8.0);
 
-        camera.zoom = vec2(
-            *zoom / screen_width(),
-            *zoom / screen_height(),
-        );
+        camera.zoom = vec2(*zoom / screen_width(), *zoom / screen_height());
     }
 }

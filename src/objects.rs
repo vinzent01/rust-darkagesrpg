@@ -1,17 +1,17 @@
 use hecs::{Entity, World};
-use macroquad::audio::{load_sound_from_bytes, play_sound_once, Sound};
+use macroquad::audio::{Sound, load_sound_from_bytes, play_sound_once};
 use macroquad::prelude::*;
 
 use crate::chest_inventory;
 use crate::database::Database;
 use crate::inventory::{self, ItemRef};
-use crate::{body::Sprite, movement::Position};
 use crate::utils;
+use crate::{body::Sprite, movement::Position};
 
-pub struct OnOffSprite{
-    pub on : Sprite,
-    pub off : Sprite,
-    pub is_on : bool
+pub struct OnOffSprite {
+    pub on: Sprite,
+    pub off: Sprite,
+    pub is_on: bool,
 }
 
 pub struct Solid;
@@ -20,6 +20,10 @@ pub struct Tree {
     pub hits: u8,
     pub fall: Option<TreeFall>,
     pub felled: bool,
+}
+
+pub struct Gatherable {
+    pub item: ItemRef,
 }
 
 pub struct TreeFall {
@@ -159,7 +163,10 @@ pub fn finish_tree_felling(
     entity: Entity,
     player_position: Vec2,
 ) -> Option<bool> {
-    let Ok(tree_position) = world.get::<&Position>(entity).map(|position| position.value) else {
+    let Ok(tree_position) = world
+        .get::<&Position>(entity)
+        .map(|position| position.value)
+    else {
         return None;
     };
     let direction = tree_position - player_position;
@@ -195,13 +202,13 @@ pub fn remove_tree_stump(
     sounds: Option<&GameSounds>,
     entity: Entity,
 ) -> bool {
-    let Ok(tree_position) = world.get::<&Position>(entity).map(|position| position.value) else {
+    let Ok(tree_position) = world
+        .get::<&Position>(entity)
+        .map(|position| position.value)
+    else {
         return false;
     };
-    if !world
-        .get::<&Tree>(entity)
-        .is_ok_and(|tree| tree.felled)
-    {
+    if !world.get::<&Tree>(entity).is_ok_and(|tree| tree.felled) {
         return false;
     }
 
@@ -214,6 +221,23 @@ pub fn remove_tree_stump(
     world
         .despawn(entity)
         .expect("tree stump disappeared before removal");
+    true
+}
+
+pub fn collect_gatherable(world: &mut World, database: &Database, entity: Entity) -> bool {
+    let Ok(gatherable) = world.get::<&Gatherable>(entity) else {
+        return false;
+    };
+    let item = gatherable.item.clone();
+    drop(gatherable);
+
+    if !inventory::add_item_to_player(world, database, item) {
+        return false;
+    }
+
+    world
+        .despawn(entity)
+        .expect("gatherable disappeared before collection");
     true
 }
 
@@ -233,9 +257,7 @@ fn add_tree_wood(world: &mut World, database: &Database, position: Vec2, quantit
     true
 }
 
-pub struct Chest{
-
-}
+pub struct Chest {}
 
 pub fn interact_chest(world: &mut World, camera: &Camera2D) {
     if !is_mouse_button_pressed(MouseButton::Left) {
@@ -274,9 +296,9 @@ pub fn interact_chest(world: &mut World, camera: &Camera2D) {
 
 #[cfg(test)]
 mod tests {
-    use super::{Tree, TreeFall, decode_mp3_to_wav};
+    use super::{Gatherable, Tree, TreeFall, decode_mp3_to_wav};
     use crate::database::Database;
-    use crate::inventory::{Inventory, Item, MAX_INVENTORY_WEIGHT_KG};
+    use crate::inventory::{Inventory, Item, ItemRef, MAX_INVENTORY_WEIGHT_KG};
     use crate::movement::Position;
     use crate::player::Player;
     use hecs::World;
@@ -393,17 +415,69 @@ mod tests {
             },
         ));
 
-        assert!(super::remove_tree_stump(
-            &mut world,
-            &database,
-            None,
-            stump
-        ));
+        assert!(super::remove_tree_stump(&mut world, &database, None, stump));
         assert!(world.get::<&Tree>(stump).is_err());
         let inventory = world.get::<&Inventory>(player).unwrap();
         let wood = inventory.items[0].as_ref().unwrap();
         assert_eq!(wood.id, "wood");
         assert_eq!(wood.quantity, 1);
+        assert_eq!(inventory.weight, 1.0);
+    }
+
+    #[test]
+    fn collecting_gatherable_stores_item_and_keeps_it_when_inventory_is_full() {
+        let mut world = World::new();
+        let mut database = Database::new();
+        database.items.insert(
+            "stone".to_string(),
+            Item {
+                id: "stone".to_string(),
+                name: "Pedra".to_string(),
+                description: "Pedra coletada do chão.".to_string(),
+                weight: 1.0,
+                texture_path: "./content/vegetation/stone.png".to_string(),
+                equipment: None,
+                recipe: None,
+            },
+        );
+        let player = world.spawn((
+            Player {},
+            Inventory {
+                items: vec![None; 25],
+                weight: 0.0,
+                max_weight: 1.0,
+                rect: Rect::new(0.0, 0.0, 100.0, 100.0),
+            },
+        ));
+        let first_stone = world.spawn((Gatherable {
+            item: ItemRef {
+                id: "stone".to_string(),
+                quantity: 1,
+            },
+        },));
+        let second_stone = world.spawn((Gatherable {
+            item: ItemRef {
+                id: "stone".to_string(),
+                quantity: 1,
+            },
+        },));
+
+        assert!(super::collect_gatherable(
+            &mut world,
+            &database,
+            first_stone
+        ));
+        assert!(!super::collect_gatherable(
+            &mut world,
+            &database,
+            second_stone
+        ));
+        assert!(world.get::<&Gatherable>(first_stone).is_err());
+        assert!(world.get::<&Gatherable>(second_stone).is_ok());
+        let inventory = world.get::<&Inventory>(player).unwrap();
+        let stone = inventory.items[0].as_ref().unwrap();
+        assert_eq!(stone.id, "stone");
+        assert_eq!(stone.quantity, 1);
         assert_eq!(inventory.weight, 1.0);
     }
 }

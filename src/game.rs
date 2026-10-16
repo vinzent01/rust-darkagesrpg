@@ -1,9 +1,9 @@
 use hecs::World;
 use macroquad::prelude::*;
 
-use crate::database::Database;
 use crate::chest_inventory;
 use crate::crafting;
+use crate::database::Database;
 use crate::hud;
 use crate::input;
 use crate::inventory;
@@ -57,15 +57,14 @@ pub fn update(
     } else if !ui_open && !attack_mode {
         let picked_up_item = inventory::pick_up_ground_item(world, database, camera);
         if !picked_up_item {
-            objects::interact_chest(world, camera);
+            let gathered_item = input::gather_input(world, database, camera);
+            if !gathered_item {
+                objects::interact_chest(world, camera);
+            }
         }
     }
 
-    if !ui_open
-        && !attack_mode
-        && *turn_phase == TurnPhase::Ready
-        && input::movement_input(world)
-    {
+    if !ui_open && !attack_mode && *turn_phase == TurnPhase::Ready && input::movement_input(world) {
         spawner::update_creature_spawners(world, database, camera);
         movement::random_walking(world);
         *turn_phase = TurnPhase::ActorsMoving;
@@ -94,7 +93,6 @@ pub fn draw_world(
 ) {
     clear_background(BLACK);
     render::draw_tilemap(world, database, camera);
-    utils::draw_grid();
     render::draw_entities(
         world,
         database,
