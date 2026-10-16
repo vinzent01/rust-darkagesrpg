@@ -1,7 +1,7 @@
 use hecs::{Entity, World};
 use macroquad::prelude::*;
 
-use crate::body::{get_all_hair_colors, get_all_skin_colors, Appearence};
+use crate::body::{Appearence, get_all_hair_colors, get_all_skin_colors};
 use crate::database::Database;
 use crate::player::Player;
 
@@ -100,9 +100,7 @@ pub fn update(world: &mut World, database: &Database) -> bool {
                 };
                 appearance.beard = previous.checked_sub(1);
             } else if layout.beard_next.contains(mouse) && !database.beards.is_empty() {
-                let selected = appearance.beard.map_or(0, |index| index + 1);
-                let next = (selected + 1) % (database.beards.len() + 1);
-                appearance.beard = (next > 0).then_some(next - 1);
+                appearance.beard = next_beard(appearance.beard, database.beards.len());
             } else if let Some(index) = layout
                 .hair_colors
                 .iter()
@@ -487,4 +485,32 @@ fn creator_entity(world: &World) -> Option<Entity> {
         .query::<Entity>()
         .iter()
         .find(|entity| world.get::<&CharacterCreatorUI>(*entity).is_ok())
+}
+
+fn next_beard(current: Option<usize>, beard_count: usize) -> Option<usize> {
+    match current {
+        None if beard_count > 0 => Some(0),
+        Some(index) => index.checked_add(1).filter(|next| *next < beard_count),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::next_beard;
+
+    #[test]
+    fn next_beard_wraps_after_the_last_beard_to_none() {
+        assert_eq!(next_beard(Some(4), 5), None);
+    }
+
+    #[test]
+    fn next_beard_selects_the_first_beard_from_none() {
+        assert_eq!(next_beard(None, 5), Some(0));
+    }
+
+    #[test]
+    fn next_beard_advances_to_the_following_beard() {
+        assert_eq!(next_beard(Some(2), 5), Some(3));
+    }
 }
