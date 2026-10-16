@@ -2,6 +2,29 @@ use macroquad::prelude::*;
 
 pub const TILE_SIZE: f32 = 32.0;
 
+pub fn draw_ui_text(text: &str, x: f32, y: f32, font_size: f32, color: Color) {
+    let font = get_default_font();
+    let (font_size, font_scale, font_scale_aspect) = camera_font_scale(font_size);
+    draw_text_ex(
+        text,
+        x,
+        y,
+        TextParams {
+            font: Some(&font),
+            font_size,
+            font_scale,
+            font_scale_aspect,
+            color,
+            ..Default::default()
+        },
+    );
+}
+
+pub fn measure_ui_text(text: &str, font_size: u16) -> TextDimensions {
+    let font = get_default_font();
+    measure_text(text, Some(&font), font_size, 1.0)
+}
+
 pub fn bezier(p0: Vec2, p1: Vec2, p2: Vec2, t: f32) -> Vec2 {
     let x =
         (1.0 - t).powi(2) * p0.x +

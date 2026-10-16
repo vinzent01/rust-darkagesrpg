@@ -4,6 +4,7 @@ use macroquad::prelude::*;
 use crate::database::Database;
 use crate::inventory::{self, Inventory};
 use crate::player::Player;
+use crate::utils;
 
 const WINDOW_PADDING: f32 = 16.0;
 const LIST_ROW_HEIGHT: f32 = 38.0;
@@ -117,8 +118,8 @@ pub fn draw(world: &World, database: &Database) {
             Color::from_rgba(28, 30, 34, 250),
         );
         draw_rectangle_lines(rect.x, rect.y, rect.w, rect.h, 2.0, LIGHTGRAY);
-        draw_text("Crafting", rect.x + WINDOW_PADDING, rect.y + 30.0, 24.0, WHITE);
-        draw_text(
+        utils::draw_ui_text("Crafting", rect.x + WINDOW_PADDING, rect.y + 30.0, 24.0, WHITE);
+        utils::draw_ui_text(
             "C ou Esc para fechar",
             rect.x + rect.w - 190.0,
             rect.y + 28.0,
@@ -153,7 +154,7 @@ pub fn draw(world: &World, database: &Database) {
                     Color::from_rgba(42, 45, 50, 255)
                 },
             );
-            draw_text(
+            utils::draw_ui_text(
                 &item.name,
                 list_rect.x + 14.0,
                 row_y + 25.0,
@@ -166,7 +167,7 @@ pub fn draw(world: &World, database: &Database) {
         let detail_width = rect.x + rect.w - WINDOW_PADDING - detail_x;
         if let Some(item_id) = recipe_ids.get(ui.selected) {
             let item = &database.items[item_id];
-            draw_text(&item.name, detail_x, list_rect.y + 25.0, 22.0, WHITE);
+            utils::draw_ui_text(&item.name, detail_x, list_rect.y + 25.0, 22.0, WHITE);
             if let Some(texture) = database.textures.get(&item.texture_path) {
                 draw_texture_ex(
                     texture,
@@ -188,7 +189,7 @@ pub fn draw(world: &World, database: &Database) {
                 LIGHTGRAY,
             );
 
-            draw_text("Materiais necessarios:", detail_x, list_rect.y + 208.0, 18.0, WHITE);
+            utils::draw_ui_text("Materiais necessarios:", detail_x, list_rect.y + 208.0, 18.0, WHITE);
             if let Some(recipe) = &item.recipe {
                 for (index, ingredient) in recipe.ingredients.iter().enumerate() {
                     let ingredient_name = database
@@ -198,7 +199,7 @@ pub fn draw(world: &World, database: &Database) {
                         .unwrap_or(&ingredient.item_id);
                     let available = player_item_quantity(world, &ingredient.item_id);
                     let enough = available >= ingredient.quantity;
-                    draw_text(
+                    utils::draw_ui_text(
                         &format!(
                             "{ingredient_name}: {available}/{}",
                             ingredient.quantity
@@ -209,7 +210,7 @@ pub fn draw(world: &World, database: &Database) {
                         if enough { GREEN } else { RED },
                     );
                 }
-                draw_text(
+                utils::draw_ui_text(
                     &format!("Produz: {}x {}", recipe.output_quantity, item.name),
                     detail_x,
                     list_rect.y + 236.0 + recipe.ingredients.len() as f32 * 24.0,
@@ -233,8 +234,8 @@ pub fn draw(world: &World, database: &Database) {
             );
             draw_rectangle_lines(button.x, button.y, button.w, button.h, 1.0, LIGHTGRAY);
             let label = "Craftar";
-            let label_width = measure_text(label, None, 18, 1.0).width;
-            draw_text(
+            let label_width = utils::measure_ui_text(label, 18).width;
+            utils::draw_ui_text(
                 label,
                 button.x + (button.w - label_width) * 0.5,
                 button.y + 25.0,
@@ -242,7 +243,7 @@ pub fn draw(world: &World, database: &Database) {
                 WHITE,
             );
             if !ui.status.is_empty() {
-                draw_text(
+                utils::draw_ui_text(
                     &ui.status,
                     detail_x,
                     button.y + 25.0,
@@ -255,7 +256,7 @@ pub fn draw(world: &World, database: &Database) {
                 );
             }
         } else {
-            draw_text("Nenhuma receita cadastrada.", detail_x, list_rect.y + 28.0, 18.0, LIGHTGRAY);
+            utils::draw_ui_text("Nenhuma receita cadastrada.", detail_x, list_rect.y + 28.0, 18.0, LIGHTGRAY);
         }
     }
 }
@@ -340,8 +341,8 @@ fn draw_wrapped_text(text: &str, x: f32, y: f32, max_width: f32, line_height: f3
         } else {
             format!("{line} {word}")
         };
-        if !line.is_empty() && measure_text(&candidate, None, 16, 1.0).width > max_width {
-            draw_text(&line, x, line_y, 16.0, color);
+        if !line.is_empty() && utils::measure_ui_text(&candidate, 16).width > max_width {
+            utils::draw_ui_text(&line, x, line_y, 16.0, color);
             line.clear();
             line_y += line_height;
         }
@@ -351,6 +352,6 @@ fn draw_wrapped_text(text: &str, x: f32, y: f32, max_width: f32, line_height: f3
         line.push_str(word);
     }
     if !line.is_empty() {
-        draw_text(&line, x, line_y, 16.0, color);
+        utils::draw_ui_text(&line, x, line_y, 16.0, color);
     }
 }

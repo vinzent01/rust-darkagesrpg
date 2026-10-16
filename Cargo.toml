@@ -7,3 +7,7 @@ edition = "2024"
 hecs = "0.11.0"
 macroquad = { version = "0.4.15", features = ["audio"] }
 minimp3 = "0.5"
+
+[patch.crates-io]
+macroquad = { git = "https://github.com/not-fl3/macroquad", branch = "master" }
+miniquad = { git = "https://github.com/not-fl3/miniquad", branch = "master" }

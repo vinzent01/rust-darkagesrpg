@@ -4,6 +4,7 @@ use macroquad::prelude::*;
 use crate::body::{Appearence, get_all_hair_colors, get_all_skin_colors};
 use crate::database::Database;
 use crate::player::Player;
+use crate::utils;
 
 const SKIN_NAMES: [&str; 3] = ["Clara", "Morena", "Escura"];
 const HAIR_COLOR_NAMES: [&str; 4] = ["Ruivo", "Branco", "Loiro", "Moreno"];
@@ -139,7 +140,7 @@ pub fn draw(world: &World, database: &Database) {
         Color::from_rgba(28, 30, 34, 250),
     );
     draw_rectangle_lines(rect.x, rect.y, rect.w, rect.h, 2.0, LIGHTGRAY);
-    draw_text(
+    utils::draw_ui_text(
         "Criador de personagem",
         rect.x + 20.0,
         rect.y + 36.0,
@@ -149,7 +150,7 @@ pub fn draw(world: &World, database: &Database) {
     draw_button(layout.close, "X", false);
     draw_preview(world, database, layout.preview);
     draw_controls(world, database, rect, layout);
-    draw_text(
+    utils::draw_ui_text(
         "P ou Esc para fechar",
         rect.x + rect.w - 190.0,
         rect.y + rect.h - 14.0,
@@ -170,7 +171,7 @@ fn draw_preview(world: &World, database: &Database, rect: Rect) {
 
     let mut player_query = world.query::<(&Player, &Appearence)>();
     let Some((_, appearance)) = player_query.iter().next() else {
-        draw_text(
+        utils::draw_ui_text(
             "Jogador indisponivel",
             rect.x + 12.0,
             rect.y + 30.0,
@@ -180,7 +181,7 @@ fn draw_preview(world: &World, database: &Database, rect: Rect) {
         return;
     };
     let Some(race) = database.races.get(appearance.body.race) else {
-        draw_text(
+        utils::draw_ui_text(
             "Corpo indisponivel",
             rect.x + 12.0,
             rect.y + 30.0,
@@ -256,8 +257,8 @@ fn draw_preview(world: &World, database: &Database, rect: Rect) {
     } else {
         "Feminino"
     };
-    let text_width = measure_text(gender, None, 18, 1.0).width;
-    draw_text(
+    let text_width = utils::measure_ui_text(gender, 18).width;
+    utils::draw_ui_text(
         gender,
         rect.x + (rect.w - text_width) * 0.5,
         rect.y + rect.h - 18.0,
@@ -272,11 +273,11 @@ fn draw_controls(world: &World, database: &Database, rect: Rect, layout: Layout)
         return;
     };
 
-    draw_text("Genero", layout.male.x, layout.male.y - 8.0, 18.0, WHITE);
+    utils::draw_ui_text("Genero", layout.male.x, layout.male.y - 8.0, 18.0, WHITE);
     draw_button(layout.male, "Masculino", appearance.body.genre);
     draw_button(layout.female, "Feminino", !appearance.body.genre);
 
-    draw_text(
+    utils::draw_ui_text(
         "Tom de pele",
         layout.skin[0].x,
         layout.skin[0].y - 8.0,
@@ -297,7 +298,7 @@ fn draw_controls(world: &World, database: &Database, rect: Rect, layout: Layout)
         .hair
         .and_then(|index| database.hairs.get(index))
         .map_or("Nenhum", |hair| hair.name);
-    draw_text(
+    utils::draw_ui_text(
         "Cabelo",
         layout.hair_previous.x,
         layout.hair_previous.y - 8.0,
@@ -322,7 +323,7 @@ fn draw_controls(world: &World, database: &Database, rect: Rect, layout: Layout)
         .beard
         .and_then(|index| database.beards.get(index))
         .map_or("Sem barba", |beard| beard.name);
-    draw_text(
+    utils::draw_ui_text(
         "Barba",
         layout.beard_previous.x,
         layout.beard_previous.y - 8.0,
@@ -343,7 +344,7 @@ fn draw_controls(world: &World, database: &Database, rect: Rect, layout: Layout)
         WHITE,
     );
 
-    draw_text(
+    utils::draw_ui_text(
         "Cor dos cabelos e da barba",
         layout.hair_colors[0].x,
         layout.hair_colors[0].y - 8.0,
@@ -361,7 +362,7 @@ fn draw_controls(world: &World, database: &Database, rect: Rect, layout: Layout)
     }
 
     if rect.w < 500.0 {
-        draw_text(
+        utils::draw_ui_text(
             "Ajuste a janela para ver todos os controles.",
             rect.x + 18.0,
             rect.y + rect.h - 40.0,
@@ -410,8 +411,8 @@ fn draw_swatch(rect: Rect, label: &str, color: Color, selected: bool) {
 }
 
 fn draw_centered_text(text: &str, rect: Rect, font_size: u16, color: Color) {
-    let dimensions = measure_text(text, None, font_size, 1.0);
-    draw_text(
+    let dimensions = utils::measure_ui_text(text, font_size);
+    utils::draw_ui_text(
         text,
         rect.x + (rect.w - dimensions.width) * 0.5,
         rect.y + (rect.h + dimensions.height) * 0.5,

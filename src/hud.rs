@@ -6,6 +6,7 @@ use crate::health::Health;
 use crate::inventory::{Equipment, GroundItem, Inventory, ItemRef};
 use crate::movement::Position;
 use crate::player::Player;
+use crate::utils;
 
 const INVENTORY_WIDTH: f32 = 420.0;
 const INVENTORY_PADDING: f32 = 12.0;
@@ -195,7 +196,7 @@ pub fn draw_inventory_ui(world : &World, database : &Database){
             12.0,
             inv.bg_color,
         );
-        draw_text(
+        utils::draw_ui_text(
             "Inventario",
             rect.x + INVENTORY_PADDING,
             rect.y + 30.0,
@@ -204,8 +205,8 @@ pub fn draw_inventory_ui(world : &World, database : &Database){
         );
         if let Some(health) = &health {
             let font_size = 16;
-            let text_width = measure_text(health, None, font_size, 1.0).width;
-            draw_text(
+            let text_width = utils::measure_ui_text(health, font_size).width;
+            utils::draw_ui_text(
                 health,
                 rect.x + rect.w - INVENTORY_PADDING - text_width,
                 rect.y + 29.0,
@@ -213,14 +214,14 @@ pub fn draw_inventory_ui(world : &World, database : &Database){
                 color::WHITE,
             );
         }
-        draw_text(
+        utils::draw_ui_text(
             &format!("Peso: {:.2} / {:.2} kg", weight, max_weight),
             rect.x + INVENTORY_PADDING,
             rect.y + 56.0,
             18.0,
             if weight >= max_weight { RED } else { LIGHTGRAY },
         );
-        draw_text(
+        utils::draw_ui_text(
             "Botao direito em uma peca para equipar",
             rect.x + INVENTORY_PADDING,
             rect.y + 75.0,
@@ -279,9 +280,9 @@ pub fn draw_inventory_ui(world : &World, database : &Database){
                         ..Default::default()
                     },
                 );
-                draw_text(&item.name, rect.x + 56.0, row_y + 19.0, 17.0, color::WHITE);
+                utils::draw_ui_text(&item.name, rect.x + 56.0, row_y + 19.0, 17.0, color::WHITE);
                 if item_is_equipped {
-                    draw_text(
+                    utils::draw_ui_text(
                         "EQUIPADO",
                         rect.x + rect.w - 124.0,
                         row_y + 18.0,
@@ -289,7 +290,7 @@ pub fn draw_inventory_ui(world : &World, database : &Database){
                         GREEN,
                     );
                 }
-                draw_text(
+                utils::draw_ui_text(
                     &format!(
                         "{} x {:.2} kg (total {:.2} kg)",
                         quantity,
@@ -301,7 +302,7 @@ pub fn draw_inventory_ui(world : &World, database : &Database){
                     14.0,
                     LIGHTGRAY,
                 );
-                draw_text(
+                utils::draw_ui_text(
                     &format!("#{}", item_index + 1),
                     rect.x + rect.w - 46.0,
                     row_y + 27.0,
@@ -309,7 +310,7 @@ pub fn draw_inventory_ui(world : &World, database : &Database){
                     GRAY,
                 );
             } else {
-                draw_text(
+                utils::draw_ui_text(
                     &format!("Espaco vazio #{}", item_index + 1),
                     rect.x + INVENTORY_PADDING + 8.0,
                     row_y + 27.0,

@@ -57,6 +57,7 @@ async fn main() {
             (window.width, window.height) = screen_size;
             game::resize_camera(&mut camera, zoom);
         }
+        set_camera(&camera);
 
         game::update(
             &mut world,
@@ -69,7 +70,6 @@ async fn main() {
             dt,
         );
 
-        set_camera(&camera);
         game::draw_world(
             &world,
             &database,
@@ -77,10 +77,9 @@ async fn main() {
             &outline_material,
             show_sprite_hitboxes,
         );
+
         set_default_camera();
 
-        draw_text("WASD mover | P personagem | C crafting", 10.0, 24.0, 20.0, WHITE);
-        draw_text(&format!("FPS {}", get_fps()), 10.0, 46.0, 20.0, WHITE);
         game::draw_hud(&world, &database, &menu);
 
         next_frame().await;

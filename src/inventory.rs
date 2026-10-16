@@ -9,7 +9,7 @@ use crate::input;
 use crate::movement::Position;
 use crate::player::Player;
 use crate::tilemap::{MAP_HEIGHT, MAP_WIDTH};
-use crate::utils::TILE_SIZE;
+use crate::utils::{self, TILE_SIZE};
 
 pub const INVENTORY_SLOT_COUNT: usize = 25;
 pub const MAX_INVENTORY_WEIGHT_KG: f32 = 20.0;
@@ -633,8 +633,8 @@ pub fn draw_ground_stack_ui(world: &World, database: &Database) {
 
     draw_rectangle(rect.x, rect.y, rect.w, rect.h, Color::from_rgba(32, 32, 32, 250));
     draw_rectangle_lines(rect.x, rect.y, rect.w, rect.h, 2.0, LIGHTGRAY);
-    draw_text("Itens no chao", rect.x + 12.0, rect.y + 26.0, 20.0, WHITE);
-    draw_text("X", rect.x + rect.w - 27.0, rect.y + 24.0, 20.0, LIGHTGRAY);
+    utils::draw_ui_text("Itens no chao", rect.x + 12.0, rect.y + 26.0, 20.0, WHITE);
+    utils::draw_ui_text("X", rect.x + rect.w - 27.0, rect.y + 24.0, 20.0, LIGHTGRAY);
 
     let items = ground_items_at(world, position);
     let visible_rows = ground_stack_visible_rows(rect);
@@ -672,7 +672,7 @@ pub fn draw_ground_stack_ui(world: &World, database: &Database) {
             .get(&item.id)
             .expect("ground item definition not found")
             .name;
-        draw_text(name, rect.x + 50.0, y + 23.0, 18.0, WHITE);
+        utils::draw_ui_text(name, rect.x + 50.0, y + 23.0, 18.0, WHITE);
     }
 
     if let Some(entity) = dragged_entity {

@@ -1,5 +1,7 @@
 use macroquad::prelude::*;
 
+use crate::utils;
+
 pub struct Menu {
     pub is_open: bool,
 }
@@ -51,15 +53,15 @@ pub fn draw(menu: &Menu) {
     );
 
     let title = "Menu";
-    let title_size = measure_text(title, None, 32, 1.0);
-    draw_text(
+    let title_size = utils::measure_ui_text(title, 32);
+    utils::draw_ui_text(
         title,
         panel_position.x + (panel_size.x - title_size.width) * 0.5,
         panel_position.y + 55.0,
         32.0,
         WHITE,
     );
-    draw_text(
+    utils::draw_ui_text(
         "Pressione M para fechar",
         panel_position.x + 70.0,
         panel_position.y + 130.0,

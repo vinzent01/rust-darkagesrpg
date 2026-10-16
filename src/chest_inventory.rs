@@ -6,6 +6,7 @@ use crate::hud::{self, UIInventory};
 use crate::inventory::{self, GroundItem, Inventory, ItemRef};
 use crate::movement::Position;
 use crate::player::Player;
+use crate::utils;
 
 const PANEL_WIDTH: f32 = 320.0;
 const PANEL_PADDING: f32 = 12.0;
@@ -233,13 +234,13 @@ pub fn draw(world: &World, database: &Database) {
         Color::from_rgba(32, 32, 32, 250),
     );
     draw_rectangle_lines(rect.x, rect.y, rect.w, rect.h, 2.0, LIGHTGRAY);
-    draw_text("Bau", rect.x + PANEL_PADDING, rect.y + 26.0, 20.0, WHITE);
-    draw_text("X", rect.x + rect.w - 27.0, rect.y + 24.0, 20.0, LIGHTGRAY);
+    utils::draw_ui_text("Bau", rect.x + PANEL_PADDING, rect.y + 26.0, 20.0, WHITE);
+    utils::draw_ui_text("X", rect.x + rect.w - 27.0, rect.y + 24.0, 20.0, LIGHTGRAY);
 
     let Ok(inventory) = world.get::<&Inventory>(chest_entity) else {
         return;
     };
-    draw_text(
+    utils::draw_ui_text(
         &format!("Peso guardado: {:.2} kg", inventory.weight),
         rect.x + PANEL_PADDING,
         rect.y + 46.0,
@@ -278,8 +279,8 @@ pub fn draw(world: &World, database: &Database) {
                     ..Default::default()
                 },
             );
-            draw_text(&item.name, rect.x + 56.0, row_y + 19.0, 16.0, WHITE);
-            draw_text(
+            utils::draw_ui_text(&item.name, rect.x + 56.0, row_y + 19.0, 16.0, WHITE);
+            utils::draw_ui_text(
                 &format!(
                     "{} x {:.2} kg (total {:.2} kg)",
                     item_ref.quantity,
@@ -292,7 +293,7 @@ pub fn draw(world: &World, database: &Database) {
                 LIGHTGRAY,
             );
         } else {
-            draw_text(
+            utils::draw_ui_text(
                 &format!("Espaco vazio #{}", item_index + 1),
                 rect.x + PANEL_PADDING + 8.0,
                 row_y + 27.0,

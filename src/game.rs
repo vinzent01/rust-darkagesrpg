@@ -110,6 +110,8 @@ pub fn draw_world(
 }
 
 pub fn draw_hud(world: &World, database: &Database, menu: &Menu) {
+    utils::draw_ui_text("WASD mover | P personagem | C crafting", 10.0, 24.0, 20.0, WHITE);
+    utils::draw_ui_text(&format!("FPS {}", get_fps()), 10.0, 46.0, 20.0, WHITE);
     hud::draw_inventory_ui(&world, database);
     chest_inventory::draw(world, database);
     inventory::draw_ground_stack_ui(world, database);
@@ -119,7 +121,7 @@ pub fn draw_hud(world: &World, database: &Database, menu: &Menu) {
         let x = screen_width() - width - 12.0;
         draw_rectangle(x, 12.0, width, 32.0, Color::from_rgba(100, 35, 25, 230));
         draw_rectangle_lines(x, 12.0, width, 32.0, 1.0, ORANGE);
-        draw_text("MODO DE ATAQUE", x + 12.0, 34.0, 18.0, WHITE);
+        utils::draw_ui_text("MODO DE ATAQUE", x + 12.0, 34.0, 18.0, WHITE);
     }
     crafting::draw(world, database);
     character_creator::draw(world, database);
