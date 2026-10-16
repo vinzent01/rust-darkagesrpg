@@ -21,6 +21,25 @@ pub struct Appearence {
     pub body: Body,
     pub beard: Option<usize>,
     pub hair: Option<usize>,
+    pub skin_color: Color,
+    pub hair_color: Color,
+}
+
+pub struct HumanLayer {
+    pub name: &'static str,
+    pub texture: Texture2D,
+    pub male_offset: Vec2,
+    pub female_offset: Vec2,
+}
+
+impl HumanLayer {
+    pub fn offset_for(&self, is_male: bool) -> Vec2 {
+        if is_male {
+            self.male_offset
+        } else {
+            self.female_offset
+        }
+    }
 }
 
 pub struct Race{
@@ -28,8 +47,6 @@ pub struct Race{
     pub description : String,
     pub female_sprite : Sprite,
     pub male_sprite : Sprite,
-    pub default_skin_color : Color,
-    pub default_hair_color : Color,
 }
 
 pub type bodyId = &'static str;
@@ -54,10 +71,10 @@ pub fn get_default_hair_color() -> Color{
 
 pub fn get_all_hair_colors() -> Vec<Color>  {
     vec![
-        get_default_hair_color(),
-        Color::from_rgba(194, 156, 60, 255),
         Color::from_rgba(138, 47, 17, 255),
         Color::from_rgba(224, 224, 224, 255),
+        Color::from_rgba(194, 156, 60, 255),
+        get_default_hair_color(),
     ]
 }
     

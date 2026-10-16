@@ -3,6 +3,7 @@ use macroquad::prelude::*;
 
 mod body;
 mod chest_inventory;
+mod character_creator;
 mod crafting;
 mod database;
 mod game;
@@ -78,7 +79,7 @@ async fn main() {
         );
         set_default_camera();
 
-        draw_text("WASD ou Setas para mover", 10.0, 24.0, 20.0, WHITE);
+        draw_text("WASD mover | P personagem | C crafting", 10.0, 24.0, 20.0, WHITE);
         draw_text(&format!("FPS {}", get_fps()), 10.0, 46.0, 20.0, WHITE);
         game::draw_hud(&world, &database, &menu);
 

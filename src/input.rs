@@ -256,11 +256,20 @@ fn appearance_hit_at(
     }
 
     if let Some(beard_id) = appearance.beard {
-        let beard = &database.hairs[beard_id];
+        let beard = &database.beards[beard_id];
+        let offset = beard.offset_for(appearance.body.genre);
+        let origin = if appearance.is_flipped {
+            vec2(
+                body_origin.x + body.texture.width() - offset.x - beard.texture.width(),
+                body_origin.y + offset.y,
+            )
+        } else {
+            body_origin + offset
+        };
         if texture_hit_at(
             database,
             &beard.texture,
-            position.value,
+            origin,
             point,
             appearance.is_flipped,
         ) {
@@ -270,15 +279,16 @@ fn appearance_hit_at(
 
     if let Some(hair_id) = appearance.hair {
         let hair = &database.hairs[hair_id];
+        let offset = hair.offset_for(appearance.body.genre);
         let hair_x = if appearance.is_flipped {
-            position.value.x + body.texture.width() - hair.offset.x - hair.texture.width()
+            body_origin.x + body.texture.width() - offset.x - hair.texture.width()
         } else {
-            position.value.x + hair.offset.x
+            body_origin.x + offset.x
         };
         if texture_hit_at(
             database,
             &hair.texture,
-            vec2(hair_x, position.value.y + hair.offset.y),
+            vec2(hair_x, body_origin.y + offset.y),
             point,
             appearance.is_flipped,
         ) {

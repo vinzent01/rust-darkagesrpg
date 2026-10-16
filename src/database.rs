@@ -4,15 +4,17 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::{fs, vec};
 
-use crate::body::{Race, Sprite, get_default_hair_color, get_default_skin_color};
+use crate::body::{
+    HumanLayer, Race, Sprite, get_default_skin_color,
+};
 use crate::health::MAX_HEALTH;
 use crate::inventory::{EquipmentSlot, Item, ItemEquipment, Recipe, RecipeIngredient};
 use crate::tilemap::{TileDefinition, TileId};
 
 pub struct Database {
     pub tiles: HashMap<TileId, TileDefinition>,
-    pub hairs: Vec<Sprite>,
-    pub beards: Vec<Sprite>,
+    pub hairs: Vec<HumanLayer>,
+    pub beards: Vec<HumanLayer>,
     pub races: HashMap<String, Race>,
     pub textures: HashMap<String, Texture2D>,
     pub items: HashMap<String, Item>,
@@ -345,23 +347,87 @@ impl Database {
                     texture: male_texture,
                     offset: vec2(0.0, 0.0),
                 },
-                default_skin_color: get_default_skin_color(),
-                default_hair_color: get_default_hair_color(),
             },
         );
     }
 
     pub async fn register_hairs(&mut self) {
-        let texture = load_texture("./content/humans/hair/medium-hair.png")
-            .await
-            .unwrap();
-        texture.set_filter(FilterMode::Nearest);
-
-        self.hairs.push(Sprite {
-            color: get_default_hair_color(),
-            texture,
-            offset: vec2(8.0, -32.0),
-        });
+        self.hairs = human_layers(
+            &self.textures,
+            &[
+                (
+                    "Médio",
+                    "./content/humans/hair/medium-hair.png",
+                    vec2(9.0, 0.0),
+                    vec2(9.0, 0.0),
+                ),
+                (
+                    "Médio curto",
+                    "./content/humans/hair/medium-hair2.png",
+                    vec2(10.0, 1.0),
+                    vec2(10.0, 0.0),
+                ),
+                (
+                    "Samurai",
+                    "./content/humans/hair/samurai-hair.png",
+                    vec2(9.0, 0.0),
+                    vec2(9.0, 1.0),
+                ),
+                (
+                    "Samurai longo",
+                    "./content/humans/hair/samurai-hair2.png",
+                    vec2(9.0, -1.0),
+                    vec2(9.0, -1.0),
+                ),
+                (
+                    "Samurai preso",
+                    "./content/humans/hair/samurai-hair3.png",
+                    vec2(9.0, 0.0),
+                    vec2(9.0, 0.0),
+                ),
+                (
+                    "Curto",
+                    "./content/humans/hair/short-hair2.png",
+                    vec2(10.0, 1.0),
+                    vec2(10.0, 1.0),
+                ),
+            ],
+        );
+        self.beards = human_layers(
+            &self.textures,
+            &[
+                (
+                    "Rala",
+                    "./content/humans/beard/beard1.png",
+                    vec2(10.0, 0.0),
+                    vec2(10.0, 1.0),
+                ),
+                (
+                    "Curta",
+                    "./content/humans/beard/beard2.png",
+                    vec2(10.0, 0.0),
+                    vec2(10.0, 1.0),
+                ),
+                (
+                    "Cheia",
+                    "./content/humans/beard/beard3.png",
+                    vec2(10.0, 0.0),
+                    vec2(10.0, 1.0),
+                ),
+                (
+                    "Cheia curta",
+                    "./content/humans/beard/beard4.png",
+                    vec2(10.0, 1.0),
+                    vec2(10.0, 1.0),
+                ),
+                (
+                    "Longa",
+                    "./content/humans/beard/beard5.png",
+                    vec2(10.0, 1.0),
+                    vec2(10.0, 2.0),
+                ),
+            ],
+        );
     }
 
     pub async fn register_tiles(&mut self) {
@@ -405,6 +471,24 @@ impl Database {
             },
         );
     }
+}
+
+fn human_layers(
+    textures: &HashMap<String, Texture2D>,
+    entries: &[(&'static str, &'static str, Vec2, Vec2)],
+) -> Vec<HumanLayer> {
+    entries
+        .iter()
+        .map(|(name, path, male_offset, female_offset)| HumanLayer {
+            name,
+            texture: textures
+                .get(*path)
+                .unwrap_or_else(|| panic!("human customization texture not found: {path}"))
+                .clone(),
+            male_offset: *male_offset,
+            female_offset: *female_offset,
+        })
+        .collect()
 }
 
 #[cfg(test)]

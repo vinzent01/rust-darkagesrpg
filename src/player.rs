@@ -5,7 +5,7 @@ use crate::inventory::{
     Equipment, Inventory, ItemRef, INVENTORY_SLOT_COUNT, MAX_INVENTORY_WEIGHT_KG,
 };
 use crate::movement::{AttackAction, Position, BezierMovement, MOVEMENT_SPEED};
-use crate::body::{Body, Appearence};
+use crate::body::{Appearence, Body, get_default_hair_color, get_default_skin_color};
 use crate::health::{Health, MAX_HEALTH};
 use crate::input::Input;
 
@@ -45,7 +45,9 @@ pub fn spawn_player(world :&mut World){
                 race : "human"
             },
             beard : None,
-            hair : Some(0)
+            hair : Some(0),
+            skin_color: get_default_skin_color(),
+            hair_color: get_default_hair_color(),
         },
         Input,
         Equipment::default(),

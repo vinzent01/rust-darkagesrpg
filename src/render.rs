@@ -190,6 +190,42 @@ fn draw_entity_outline(
             outline_material,
             outline_color,
         );
+        let base = position.value + position.offset;
+        let body_width = body.texture.width();
+        if let Some(beard_id) = appearance.beard {
+            let beard = &database.beards[beard_id];
+            let offset = beard.offset_for(appearance.body.genre);
+            let x = if appearance.is_flipped {
+                base.x + body_width - offset.x - beard.texture.width()
+            } else {
+                base.x + offset.x
+            };
+            draw_texture_outline(
+                &beard.texture,
+                x,
+                base.y + offset.y,
+                appearance.is_flipped,
+                outline_material,
+                outline_color,
+            );
+        }
+        if let Some(hair_id) = appearance.hair {
+            let hair = &database.hairs[hair_id];
+            let offset = hair.offset_for(appearance.body.genre);
+            let x = if appearance.is_flipped {
+                base.x + body_width - offset.x - hair.texture.width()
+            } else {
+                base.x + offset.x
+            };
+            draw_texture_outline(
+                &hair.texture,
+                x,
+                base.y + offset.y,
+                appearance.is_flipped,
+                outline_material,
+                outline_color,
+            );
+        }
     }
 }
 
@@ -372,11 +408,17 @@ fn appearance_is_visible(
     }
 
     if let Some(beard_id) = appearance.beard {
-        let beard = &database.hairs[beard_id];
+        let beard = &database.beards[beard_id];
+        let offset = beard.offset_for(appearance.body.genre);
+        let left = if appearance.is_flipped {
+            base.x + body.texture.width() - offset.x - beard.texture.width()
+        } else {
+            base.x + offset.x
+        };
         if texture_is_visible(
             &beard.texture,
-            position.value.x,
-            position.value.y,
+            left,
+            base.y + offset.y,
             camera_bounds,
         ) {
             return true;
@@ -384,15 +426,16 @@ fn appearance_is_visible(
     }
     if let Some(hair_id) = appearance.hair {
         let hair = &database.hairs[hair_id];
+        let offset = hair.offset_for(appearance.body.genre);
         let left = if appearance.is_flipped {
-            position.value.x + body.texture.width() - hair.offset.x - hair.texture.width()
+            base.x + body.texture.width() - offset.x - hair.texture.width()
         } else {
-            position.value.x + hair.offset.x
+            base.x + offset.x
         };
         if texture_is_visible(
             &hair.texture,
             left,
-            position.value.y + hair.offset.y,
+            base.y + offset.y,
             camera_bounds,
         ) {
             return true;
@@ -578,18 +621,25 @@ fn draw_appearance_hitboxes(
     }
 
     if let Some(beard_id) = appearance.beard {
-        let beard = &database.hairs[beard_id];
-        draw_texture_hitbox(&beard.texture, position.value.x, position.value.y);
+        let beard = &database.beards[beard_id];
+        let offset = beard.offset_for(appearance.body.genre);
+        let x = if appearance.is_flipped {
+            base_x + body.texture.width() - offset.x - beard.texture.width()
+        } else {
+            base_x + offset.x
+        };
+        draw_texture_hitbox(&beard.texture, x, base_y + offset.y);
     }
 
     if let Some(hair_id) = appearance.hair {
         let hair = &database.hairs[hair_id];
+        let offset = hair.offset_for(appearance.body.genre);
         let hair_x = if appearance.is_flipped {
-            position.value.x + body.texture.width() - hair.offset.x - hair.texture.width()
+            base_x + body.texture.width() - offset.x - hair.texture.width()
         } else {
-            position.value.x + hair.offset.x
+            base_x + offset.x
         };
-        draw_texture_hitbox(&hair.texture, hair_x, position.value.y + hair.offset.y);
+        draw_texture_hitbox(&hair.texture, hair_x, base_y + offset.y);
     }
 }
 
@@ -613,7 +663,7 @@ fn draw_appearence(
         &body_sprite.texture,
         position.value.x + position.offset.x,
         position.value.y + position.offset.y,
-        race.default_skin_color,
+        appearence.skin_color,
         DrawTextureParams {
             flip_x: appearence.is_flipped,
             ..Default::default()
@@ -712,12 +762,18 @@ fn draw_appearence(
     }
 
     if let Some(beard_id) = appearence.beard {
-        let beard = &database.hairs[beard_id];
+        let beard = &database.beards[beard_id];
+        let offset = beard.offset_for(appearence.body.genre);
+        let beard_x = if appearence.is_flipped {
+            body_left + body_width - offset.x - beard.texture.width()
+        } else {
+            body_left + offset.x
+        };
         draw_texture_ex(
             &beard.texture,
-            position.value.x,
-            position.value.y,
-            beard.color,
+            beard_x,
+            body_top + offset.y,
+            appearence.hair_color,
             DrawTextureParams {
                 flip_x: appearence.is_flipped,
                 ..Default::default()
@@ -727,18 +783,18 @@ fn draw_appearence(
 
     if let Some(hair_id) = appearence.hair {
         let hair = &database.hairs[hair_id];
-        let body_width = body_sprite.texture.width();
+        let offset = hair.offset_for(appearence.body.genre);
         let hair_x = if appearence.is_flipped {
-            position.value.x + body_width - hair.offset.x - hair.texture.width()
+            body_left + body_width - offset.x - hair.texture.width()
         } else {
-            position.value.x + hair.offset.x
+            body_left + offset.x
         };
 
         draw_texture_ex(
             &hair.texture,
             hair_x,
-            position.value.y + hair.offset.y,
-            hair.color,
+            body_top + offset.y,
+            appearence.hair_color,
             DrawTextureParams {
                 flip_x: appearence.is_flipped,
                 ..Default::default()
