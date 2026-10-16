@@ -13,39 +13,7 @@ pub struct Player {}
 
 pub fn spawn_player(world :&mut World){
     let mut items = vec![None; INVENTORY_SLOT_COUNT];
-    items[0] = Some(ItemRef {
-        id: "stick".to_string(),
-        quantity: 5,
-    });
-    items[1] = Some(ItemRef {
-        id: "stone_axe".to_string(),
-        quantity: 1,
-    });
-    items[2] = Some(ItemRef {
-        id: "pickaxe".to_string(),
-        quantity: 1,
-    });
-    items[3] = Some(ItemRef {
-        id: "linen_tunic".to_string(),
-        quantity: 1,
-    });
-    items[4] = Some(ItemRef {
-        id: "linen_pants".to_string(),
-        quantity: 1,
-    });
-    items[5] = Some(ItemRef {
-        id: "leather_boots".to_string(),
-        quantity: 1,
-    });
-    items[6] = Some(ItemRef {
-        id: "sword".to_string(),
-        quantity: 1,
-    });
-    items[7] = Some(ItemRef {
-        id: "shield".to_string(),
-        quantity: 1,
-    });
-
+    
     world.spawn((
         Player{},
         Health::new(MAX_HEALTH),

@@ -77,10 +77,10 @@ async fn main() {
             show_sprite_hitboxes,
         );
         set_default_camera();
-        game::draw_hud(&world, &database, &menu);
 
-        draw_text("WASD ou Setas para mover", 10.0, 20.0, 24.0, WHITE);
-        draw_text(&format!("FPS {}", get_fps()), 10.0, 30.0, 24.0, WHITE);
+        draw_text("WASD ou Setas para mover", 10.0, 24.0, 20.0, WHITE);
+        draw_text(&format!("FPS {}", get_fps()), 10.0, 46.0, 20.0, WHITE);
+        game::draw_hud(&world, &database, &menu);
 
         next_frame().await;
     }

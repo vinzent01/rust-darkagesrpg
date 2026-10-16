@@ -157,7 +157,7 @@ impl Database {
                     female_texture_path: "./content/melee weapons/stone-axe.png".to_string(),
                     offset: vec2(-8.0, 2.0),
                 }),
-                Some(recipe(&[("stick", 2), ("wood", 3)], 1)),
+                Some(recipe(&[("stick", 2), ("stone", 2)], 1)),
             ),
             (
                 "pickaxe",
@@ -171,7 +171,7 @@ impl Database {
                     female_texture_path: "./content/melee weapons/pickAxe.png".to_string(),
                     offset: vec2(-8.0, 2.0),
                 }),
-                Some(recipe(&[("stick", 2), ("wood", 3)], 1)),
+                Some(recipe(&[("stick", 2), ("stone", 3)], 1)),
             ),
             (
                 "sword",
@@ -185,7 +185,7 @@ impl Database {
                     female_texture_path: "./content/melee weapons/sword.png".to_string(),
                     offset: vec2(-8.0, 2.0),
                 }),
-                Some(recipe(&[("stick", 1), ("wood", 4)], 1)),
+                None
             ),
             (
                 "shield",
@@ -199,7 +199,7 @@ impl Database {
                     female_texture_path: "./content/shield/shield.png".to_string(),
                     offset: vec2(20.0, 8.0),
                 }),
-                Some(recipe(&[("wood", 4)], 1)),
+                None
             ),
             (
                 "linen_tunic",
