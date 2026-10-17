@@ -8,23 +8,39 @@ use crate::movement::{AttackAction, Position, BezierMovement, MOVEMENT_SPEED};
 use crate::body::{Appearence, Body, get_default_hair_color, get_default_skin_color};
 use crate::health::{Health, MAX_HEALTH};
 use crate::input::Input;
+use crate::tilemap::MAP_CENTER_CELL;
+use crate::utils::cell_to_world;
 
 pub struct Player {}
 
-pub fn spawn_player(world :&mut World){
+pub fn default_appearance() -> Appearence {
+    Appearence {
+        is_flipped: false,
+        body: Body {
+            genre: true,
+            race: "human",
+        },
+        beard: None,
+        hair: Some(0),
+        skin_color: get_default_skin_color(),
+        hair_color: get_default_hair_color(),
+    }
+}
+
+pub fn spawn_player(world: &mut World, appearance: Appearence) {
     let mut items = vec![None; INVENTORY_SLOT_COUNT];
     
     world.spawn((
         Player{},
         Health::new(MAX_HEALTH),
         Position {
-            value : vec2(0.0, 0.0),
+            value : cell_to_world(MAP_CENTER_CELL.0, MAP_CENTER_CELL.1),
             offset : vec2(0.0, -32.0)
         },
         BezierMovement {
-            p0 : vec2(0.0, 0.0),
-            p1 : vec2(0.0, 0.0),
-            p2 : vec2(0.0, 0.0),
+            p0 : cell_to_world(MAP_CENTER_CELL.0, MAP_CENTER_CELL.1),
+            p1 : cell_to_world(MAP_CENTER_CELL.0, MAP_CENTER_CELL.1),
+            p2 : cell_to_world(MAP_CENTER_CELL.0, MAP_CENTER_CELL.1),
             t : 0.0,
             has_started : false,
             speed : MOVEMENT_SPEED,
@@ -38,17 +54,7 @@ pub fn spawn_player(world :&mut World){
             striking: false,
             active: false,
         },
-        Appearence {
-            is_flipped : false,
-            body : Body{
-                genre : true,
-                race : "human"
-            },
-            beard : None,
-            hair : Some(0),
-            skin_color: get_default_skin_color(),
-            hair_color: get_default_hair_color(),
-        },
+        appearance,
         Input,
         Equipment::default(),
         Inventory {

@@ -2,13 +2,13 @@ use hecs::World;
 use macroquad::{color, prelude::*};
 
 use crate::body::{Sprite, SpriteOverlay};
+use crate::character_creator;
 use crate::database::Database;
 use crate::inventory::{INVENTORY_SLOT_COUNT, Inventory};
 use crate::movement::Position;
 use crate::objects::{Chest, Gatherable, OnOffSprite, Solid, Tree};
-use crate::player;
 use crate::spawner;
-use crate::tilemap::{MAP_HEIGHT, MAP_WIDTH, create_map};
+use crate::tilemap::{MAP_CENTER_CELL, MAP_HEIGHT, MAP_WIDTH, create_map};
 use crate::utils::{TILE_SIZE, cell_to_world};
 
 const TREE_DENSITY_PERCENT: i32 = 7;
@@ -24,22 +24,19 @@ const BUSH_TEXTURES: [&str; 2] = [
 const STONE_TEXTURE: &str = "./content/vegetation/stone.png";
 
 pub async fn spawn_entities(world: &mut World, database: &Database) {
-    player::spawn_player(world);
-
     let horse_texture = database
         .textures
         .get("./content/creatures/horse.png")
-        .expect("horse texture not found")
-        .clone();
+        .expect("horse texture not found");
 
-    let saddle_texture = database
+    database
         .textures
         .get("./content/creatures/saddle.png")
-        .expect("saddle texture not found")
-        .clone();
+        .expect("saddle texture not found");
+
     let horse_sprite_offset = vec2(
-        (TILE_SIZE - horse_texture.width()) * 0.5,
-        (TILE_SIZE - horse_texture.height()),
+        (TILE_SIZE - &horse_texture.width()) * 0.5,
+        TILE_SIZE - &horse_texture.height(),
     );
 
     let horse = spawner::spawn_creature(
@@ -57,22 +54,12 @@ pub async fn spawn_entities(world: &mut World, database: &Database) {
             SpriteOverlay {
                 sprite: Sprite {
                     color: color::WHITE,
-                    texture: saddle_texture,
+                    texture_path: "./content/creatures/saddle.png".into(),
                     offset: vec2(29.0, 47.0) + horse_sprite_offset,
                 },
             },
         )
         .expect("initial horse disappeared before saddle was added");
-
-    let chest_open_texture = load_texture("./content/chests/chest-open.png")
-        .await
-        .unwrap();
-    chest_open_texture.set_filter(FilterMode::Nearest);
-
-    let chest_closed_texture = load_texture("./content/chests/chest-closed.png")
-        .await
-        .unwrap();
-    chest_closed_texture.set_filter(FilterMode::Nearest);
 
     world.spawn((
         Position {
@@ -82,12 +69,12 @@ pub async fn spawn_entities(world: &mut World, database: &Database) {
         OnOffSprite {
             on: Sprite {
                 color: color::WHITE,
-                texture: chest_open_texture,
+                texture_path: "./content/chests/chest-open.png".into(),
                 offset: vec2(0.0, 0.0),
             },
             off: Sprite {
                 color: color::WHITE,
-                texture: chest_closed_texture,
+                texture_path: "./content/chests/chest-closed.png".into(),
                 offset: vec2(0.0, 0.0),
             },
             is_on: false,
@@ -105,37 +92,23 @@ pub async fn spawn_entities(world: &mut World, database: &Database) {
     spawn_nature(world, database);
     spawner::spawn_creature_spawner(world);
     world.spawn((create_map(),));
+    character_creator::open_for_creation(world);
 }
 
 fn spawn_nature(world: &mut World, database: &Database) {
-    let tree_top = database
-        .textures
-        .get(TREE_TOP_TEXTURE)
-        .expect("tree top texture not found")
-        .clone();
-    let tree_base = database
-        .textures
-        .get(TREE_BASE_TEXTURE)
-        .expect("tree base texture not found")
-        .clone();
-    let bushes = BUSH_TEXTURES.map(|path| {
-        database
-            .textures
-            .get(path)
-            .unwrap_or_else(|| panic!("bush texture not found: {path}"))
-            .clone()
-    });
-    let stone = database
-        .textures
-        .get(STONE_TEXTURE)
-        .expect("stone texture not found")
-        .clone();
+    let tree_top = database.texture(TREE_TOP_TEXTURE);
+    let tree_base = database.texture(TREE_BASE_TEXTURE);
 
     for y in 0..MAP_HEIGHT {
         for x in 0..MAP_WIDTH {
             let x = x as i32;
             let y = y as i32;
-            if x * x + y * y <= CLEARING_RADIUS * CLEARING_RADIUS {
+            let center_x = MAP_CENTER_CELL.0;
+            let center_y = MAP_CENTER_CELL.1;
+            let near_center = (x - center_x).pow(2) + (y - center_y).pow(2)
+                <= CLEARING_RADIUS * CLEARING_RADIUS;
+            let near_origin = x * x + y * y <= CLEARING_RADIUS * CLEARING_RADIUS;
+            if near_center || near_origin {
                 continue;
             }
 
@@ -158,13 +131,13 @@ fn spawn_nature(world: &mut World, database: &Database) {
                     },
                     Sprite {
                         color: color::WHITE,
-                        texture: tree_base.clone(),
+                        texture_path: TREE_BASE_TEXTURE.into(),
                         offset: base_offset,
                     },
                     SpriteOverlay {
                         sprite: Sprite {
                             color: color::WHITE,
-                            texture: tree_top.clone(),
+                            texture_path: TREE_TOP_TEXTURE.into(),
                             offset: top_offset,
                         },
                     },
@@ -176,11 +149,13 @@ fn spawn_nature(world: &mut World, database: &Database) {
                     },
                 ));
             } else if roll < TREE_DENSITY_PERCENT + BUSH_DENSITY_PERCENT {
-                let texture = &bushes[macroquad::rand::gen_range(0, bushes.len())];
+                let texture_path =
+                    BUSH_TEXTURES[macroquad::rand::gen_range(0, BUSH_TEXTURES.len())];
+                let texture = database.texture(texture_path);
                 spawn_gatherable(
                     world,
                     position,
-                    texture.clone(),
+                    texture_path,
                     "stick",
                     vec2(
                         (TILE_SIZE - texture.width()) * 0.5,
@@ -191,11 +166,11 @@ fn spawn_nature(world: &mut World, database: &Database) {
                 spawn_gatherable(
                     world,
                     position,
-                    stone.clone(),
+                    STONE_TEXTURE,
                     "stone",
                     vec2(
-                        (TILE_SIZE - stone.width()) * 0.5,
-                        TILE_SIZE - stone.height(),
+                        (TILE_SIZE - database.texture(STONE_TEXTURE).width()) * 0.5,
+                        TILE_SIZE - database.texture(STONE_TEXTURE).height(),
                     ),
                 );
             }
@@ -206,7 +181,7 @@ fn spawn_nature(world: &mut World, database: &Database) {
 fn spawn_gatherable(
     world: &mut World,
     position: Vec2,
-    texture: Texture2D,
+    texture_path: &str,
     item_id: &str,
     sprite_offset: Vec2,
 ) {
@@ -217,7 +192,7 @@ fn spawn_gatherable(
         },
         Sprite {
             color: color::WHITE,
-            texture,
+            texture_path: texture_path.into(),
             offset: sprite_offset,
         },
         Gatherable {

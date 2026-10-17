@@ -33,6 +33,7 @@ async fn main() {
     let mut turn_phase = game::TurnPhase::Ready;
     let mut menu = menu::Menu::new();
     let mut show_sprite_hitboxes = false;
+    let mut render_cache = render::EntityRenderCache::default();
     let outline_material =
         render::create_outline_material().expect("failed to create outline material");
 
@@ -76,6 +77,7 @@ async fn main() {
             &camera,
             &outline_material,
             show_sprite_hitboxes,
+            &mut render_cache,
         );
 
         set_default_camera();

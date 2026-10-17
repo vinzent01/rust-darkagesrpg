@@ -3,7 +3,7 @@ use macroquad::prelude::*;
 
 use crate::body::{Appearence, get_all_hair_colors, get_all_skin_colors};
 use crate::database::Database;
-use crate::player::Player;
+use crate::player::{self, Player};
 use crate::utils;
 
 const SKIN_NAMES: [&str; 3] = ["Clara", "Morena", "Escura"];
@@ -11,6 +11,7 @@ const HAIR_COLOR_NAMES: [&str; 4] = ["Ruivo", "Branco", "Loiro", "Moreno"];
 
 pub struct CharacterCreatorUI {
     rect: Rect,
+    appearance: Appearence,
 }
 
 #[derive(Clone, Copy)]
@@ -25,94 +26,129 @@ struct Layout {
     beard_next: Rect,
     hair_colors: [Rect; 4],
     close: Rect,
+    confirm: Rect,
+}
+
+pub fn open_for_creation(world: &mut World) {
+    open(world, player::default_appearance());
 }
 
 pub fn update(world: &mut World, database: &Database) -> bool {
-    if is_key_pressed(KeyCode::P) {
+    if is_key_pressed(KeyCode::P) && player_appearance(world).is_some() {
         if let Some(entity) = creator_entity(world) {
-            world
-                .despawn(entity)
-                .expect("character creator disappeared");
-        } else {
-            let width = (screen_width() - 32.0).min(900.0);
-            let height = (screen_height() - 32.0).min(620.0);
-            world.spawn((CharacterCreatorUI {
-                rect: Rect::new(
-                    (screen_width() - width) * 0.5,
-                    (screen_height() - height) * 0.5,
-                    width,
-                    height,
-                ),
-            },));
+            finish_creation(world, entity);
+            return true;
         }
+        open(
+            world,
+            player_appearance(world).expect("player appearance disappeared"),
+        );
     }
 
     let Some(ui_entity) = creator_entity(world) else {
         return false;
     };
-    let rect = world
+    let (rect, initial_creation) = world
         .get::<&CharacterCreatorUI>(ui_entity)
-        .expect("character creator disappeared")
-        .rect;
-    if is_key_pressed(KeyCode::Escape) {
-        world
-            .despawn(ui_entity)
-            .expect("character creator disappeared while closing");
-        return false;
+        .map(|ui| (ui.rect, player_appearance(world).is_none()))
+        .expect("character creator disappeared");
+    if is_key_pressed(KeyCode::Escape) && !initial_creation {
+        finish_creation(world, ui_entity);
+        return true;
     }
 
     let layout = layout(rect);
     if is_mouse_button_pressed(MouseButton::Left) {
         let mouse = mouse_position().into();
-        if layout.close.contains(mouse) {
-            world
-                .despawn(ui_entity)
-                .expect("character creator disappeared while closing");
-            return false;
+        if layout.confirm.contains(mouse) || (layout.close.contains(mouse) && !initial_creation) {
+            finish_creation(world, ui_entity);
+            return true;
         }
 
-        let mut player_query = world.query::<(&Player, &mut Appearence)>();
-        if let Some((_, appearance)) = player_query.iter().next() {
-            if layout.male.contains(mouse) {
-                appearance.body.genre = true;
-            } else if layout.female.contains(mouse) {
-                appearance.body.genre = false;
-            } else if let Some(index) = layout.skin.iter().position(|button| button.contains(mouse))
-            {
-                appearance.skin_color = get_all_skin_colors()[index];
-            } else if layout.hair_previous.contains(mouse) && !database.hairs.is_empty() {
-                appearance.hair = Some(
-                    appearance
-                        .hair
-                        .unwrap_or(0)
-                        .checked_add(database.hairs.len() - 1)
-                        .unwrap_or(0)
-                        % database.hairs.len(),
-                );
-            } else if layout.hair_next.contains(mouse) && !database.hairs.is_empty() {
-                appearance.hair =
-                    Some(appearance.hair.unwrap_or(0).wrapping_add(1) % database.hairs.len());
-            } else if layout.beard_previous.contains(mouse) && !database.beards.is_empty() {
-                let selected = appearance.beard.map_or(0, |index| index + 1);
-                let previous = if selected == 0 {
-                    database.beards.len()
-                } else {
-                    selected - 1
-                };
-                appearance.beard = previous.checked_sub(1);
-            } else if layout.beard_next.contains(mouse) && !database.beards.is_empty() {
-                appearance.beard = next_beard(appearance.beard, database.beards.len());
-            } else if let Some(index) = layout
-                .hair_colors
-                .iter()
-                .position(|button| button.contains(mouse))
-            {
-                appearance.hair_color = get_all_hair_colors()[index];
-            }
+        let mut ui = world
+            .get::<&mut CharacterCreatorUI>(ui_entity)
+            .expect("character creator disappeared");
+        let appearance = &mut ui.appearance;
+        if layout.male.contains(mouse) {
+            appearance.body.genre = true;
+        } else if layout.female.contains(mouse) {
+            appearance.body.genre = false;
+        } else if let Some(index) = layout.skin.iter().position(|button| button.contains(mouse)) {
+            appearance.skin_color = get_all_skin_colors()[index];
+        } else if layout.hair_previous.contains(mouse) && !database.hairs.is_empty() {
+            appearance.hair = Some(
+                appearance
+                    .hair
+                    .unwrap_or(0)
+                    .checked_add(database.hairs.len() - 1)
+                    .unwrap_or(0)
+                    % database.hairs.len(),
+            );
+        } else if layout.hair_next.contains(mouse) && !database.hairs.is_empty() {
+            appearance.hair =
+                Some(appearance.hair.unwrap_or(0).wrapping_add(1) % database.hairs.len());
+        } else if layout.beard_previous.contains(mouse) && !database.beards.is_empty() {
+            let selected = appearance.beard.map_or(0, |index| index + 1);
+            let previous = if selected == 0 {
+                database.beards.len()
+            } else {
+                selected - 1
+            };
+            appearance.beard = previous.checked_sub(1);
+        } else if layout.beard_next.contains(mouse) && !database.beards.is_empty() {
+            appearance.beard = next_beard(appearance.beard, database.beards.len());
+        } else if let Some(index) = layout
+            .hair_colors
+            .iter()
+            .position(|button| button.contains(mouse))
+        {
+            appearance.hair_color = get_all_hair_colors()[index];
         }
     }
 
     true
+}
+
+fn open(world: &mut World, appearance: Appearence) {
+    let width = (screen_width() - 32.0).min(900.0);
+    let height = (screen_height() - 32.0).min(620.0);
+    world.spawn((CharacterCreatorUI {
+        rect: Rect::new(
+            (screen_width() - width) * 0.5,
+            (screen_height() - height) * 0.5,
+            width,
+            height,
+        ),
+        appearance,
+    },));
+}
+
+fn player_appearance(world: &World) -> Option<Appearence> {
+    world
+        .query::<(&Player, &Appearence)>()
+        .iter()
+        .next()
+        .map(|(_, appearance)| appearance.clone())
+}
+
+fn finish_creation(world: &mut World, ui_entity: Entity) {
+    let appearance = world
+        .get::<&CharacterCreatorUI>(ui_entity)
+        .expect("character creator disappeared")
+        .appearance
+        .clone();
+
+    if let Some((player_entity, _)) = world.query::<(Entity, &Player)>().iter().next() {
+        *world
+            .get::<&mut Appearence>(player_entity)
+            .expect("player appearance disappeared") = appearance;
+    } else {
+        player::spawn_player(world, appearance);
+    }
+
+    world
+        .despawn(ui_entity)
+        .expect("character creator disappeared while closing");
 }
 
 pub fn draw(world: &World, database: &Database) {
@@ -123,6 +159,8 @@ pub fn draw(world: &World, database: &Database) {
         .get::<&CharacterCreatorUI>(ui_entity)
         .expect("character creator disappeared");
     let rect = ui.rect;
+    let initial_creation = player_appearance(world).is_none();
+    let appearance = &ui.appearance;
     let layout = layout(rect);
 
     draw_rectangle(
@@ -147,11 +185,26 @@ pub fn draw(world: &World, database: &Database) {
         26.0,
         WHITE,
     );
-    draw_button(layout.close, "X", false);
-    draw_preview(world, database, layout.preview);
-    draw_controls(world, database, rect, layout);
+    if !initial_creation {
+        draw_button(layout.close, "X", false);
+    }
+    draw_preview(database, layout.preview, appearance);
+    draw_controls(database, rect, layout, appearance);
+    draw_button(
+        layout.confirm,
+        if initial_creation {
+            "Criar personagem"
+        } else {
+            "Concluir"
+        },
+        false,
+    );
     utils::draw_ui_text(
-        "P ou Esc para fechar",
+        if initial_creation {
+            "Confirme para entrar no mundo"
+        } else {
+            "P ou Esc para fechar"
+        },
         rect.x + rect.w - 190.0,
         rect.y + rect.h - 14.0,
         16.0,
@@ -159,7 +212,7 @@ pub fn draw(world: &World, database: &Database) {
     );
 }
 
-fn draw_preview(world: &World, database: &Database, rect: Rect) {
+fn draw_preview(database: &Database, rect: Rect, appearance: &Appearence) {
     draw_rectangle(
         rect.x,
         rect.y,
@@ -169,17 +222,6 @@ fn draw_preview(world: &World, database: &Database, rect: Rect) {
     );
     draw_rectangle_lines(rect.x, rect.y, rect.w, rect.h, 1.0, DARKGRAY);
 
-    let mut player_query = world.query::<(&Player, &Appearence)>();
-    let Some((_, appearance)) = player_query.iter().next() else {
-        utils::draw_ui_text(
-            "Jogador indisponivel",
-            rect.x + 12.0,
-            rect.y + 30.0,
-            16.0,
-            WHITE,
-        );
-        return;
-    };
     let Some(race) = database.races.get(appearance.body.race) else {
         utils::draw_ui_text(
             "Corpo indisponivel",
@@ -195,21 +237,22 @@ fn draw_preview(world: &World, database: &Database, rect: Rect) {
     } else {
         &race.female_sprite
     };
-    let scale = ((rect.w - 28.0) / body.texture.width())
-        .min((rect.h - 100.0) / body.texture.height())
+    let body_texture = database.texture(&body.texture_path);
+    let scale = ((rect.w - 28.0) / body_texture.width())
+        .min((rect.h - 100.0) / body_texture.height())
         .max(1.0);
-    let body_x = rect.x + (rect.w - body.texture.width() * scale) * 0.5;
-    let body_y = rect.y + 48.0 + (rect.h - 100.0 - body.texture.height() * scale) * 0.5;
+    let body_x = rect.x + (rect.w - body_texture.width() * scale) * 0.5;
+    let body_y = rect.y + 48.0 + (rect.h - 100.0 - body_texture.height() * scale) * 0.5;
 
     draw_texture_ex(
-        &body.texture,
+        body_texture,
         body_x,
         body_y,
         appearance.skin_color,
         DrawTextureParams {
             dest_size: Some(vec2(
-                body.texture.width() * scale,
-                body.texture.height() * scale,
+                body_texture.width() * scale,
+                body_texture.height() * scale,
             )),
             ..Default::default()
         },
@@ -218,15 +261,16 @@ fn draw_preview(world: &World, database: &Database, rect: Rect) {
     if let Some(beard_id) = appearance.beard {
         if let Some(beard) = database.beards.get(beard_id) {
             let offset = beard.offset_for(appearance.body.genre);
+            let texture = database.texture(beard.texture_path);
             draw_texture_ex(
-                &beard.texture,
+                texture,
                 body_x + offset.x * scale,
                 body_y + offset.y * scale,
                 appearance.hair_color,
                 DrawTextureParams {
                     dest_size: Some(vec2(
-                        beard.texture.width() * scale,
-                        beard.texture.height() * scale,
+                        texture.width() * scale,
+                        texture.height() * scale,
                     )),
                     ..Default::default()
                 },
@@ -236,15 +280,16 @@ fn draw_preview(world: &World, database: &Database, rect: Rect) {
     if let Some(hair_id) = appearance.hair {
         if let Some(hair) = database.hairs.get(hair_id) {
             let offset = hair.offset_for(appearance.body.genre);
+            let texture = database.texture(hair.texture_path);
             draw_texture_ex(
-                &hair.texture,
+                texture,
                 body_x + offset.x * scale,
                 body_y + offset.y * scale,
                 appearance.hair_color,
                 DrawTextureParams {
                     dest_size: Some(vec2(
-                        hair.texture.width() * scale,
-                        hair.texture.height() * scale,
+                        texture.width() * scale,
+                        texture.height() * scale,
                     )),
                     ..Default::default()
                 },
@@ -267,12 +312,7 @@ fn draw_preview(world: &World, database: &Database, rect: Rect) {
     );
 }
 
-fn draw_controls(world: &World, database: &Database, rect: Rect, layout: Layout) {
-    let mut player_query = world.query::<(&Player, &Appearence)>();
-    let Some((_, appearance)) = player_query.iter().next() else {
-        return;
-    };
-
+fn draw_controls(database: &Database, rect: Rect, layout: Layout, appearance: &Appearence) {
     utils::draw_ui_text("Genero", layout.male.x, layout.male.y - 8.0, 18.0, WHITE);
     draw_button(layout.male, "Masculino", appearance.body.genre);
     draw_button(layout.female, "Feminino", !appearance.body.genre);
@@ -478,6 +518,7 @@ fn layout(rect: Rect) -> Layout {
             )
         }),
         close: Rect::new(rect.x + rect.w - 42.0, rect.y + 10.0, 30.0, 30.0),
+        confirm: Rect::new(rect.x + rect.w - 190.0, rect.y + rect.h - 58.0, 170.0, 36.0),
     }
 }
 
@@ -498,7 +539,34 @@ fn next_beard(current: Option<usize>, beard_count: usize) -> Option<usize> {
 
 #[cfg(test)]
 mod tests {
-    use super::next_beard;
+    use super::{CharacterCreatorUI, creator_entity, finish_creation, next_beard};
+    use crate::movement::Position;
+    use crate::player::{self, Player};
+    use crate::tilemap::MAP_CENTER_CELL;
+    use crate::utils::cell_to_world;
+    use hecs::World;
+    use macroquad::prelude::Rect;
+
+    #[test]
+    fn player_is_spawned_at_map_center_only_after_creation_is_confirmed() {
+        let mut world = World::new();
+        let creator = world.spawn((CharacterCreatorUI {
+            rect: Rect::new(0.0, 0.0, 100.0, 100.0),
+            appearance: player::default_appearance(),
+        },));
+
+        assert!(world.query::<&Player>().iter().next().is_none());
+
+        finish_creation(&mut world, creator);
+
+        let mut players = world.query::<(&Player, &Position)>();
+        let (_, position) = players.iter().next().expect("player was not spawned");
+        assert_eq!(
+            position.value,
+            cell_to_world(MAP_CENTER_CELL.0, MAP_CENTER_CELL.1)
+        );
+        assert!(creator_entity(&world).is_none());
+    }
 
     #[test]
     fn next_beard_wraps_after_the_last_beard_to_none() {

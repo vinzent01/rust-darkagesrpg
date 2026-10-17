@@ -92,11 +92,11 @@ pub fn spawn_creature(
         .creatures
         .get(creature_id)
         .ok_or_else(|| format!("unknown creature id: {creature_id}"))?;
-    let texture = database
-        .textures
-        .get(&creature.texture_path)
-        .ok_or_else(|| format!("texture not loaded for creature: {creature_id}"))?
-        .clone();
+    if !database.textures.contains_key(&creature.texture_path) {
+        return Err(format!(
+            "texture not loaded for creature: {creature_id}"
+        ));
+    }
 
     Ok(world.spawn((
         Health::new(creature.maximum_health),
@@ -115,7 +115,7 @@ pub fn spawn_creature(
         RandomWalker {},
         Sprite {
             color: color::WHITE,
-            texture,
+            texture_path: creature.texture_path.clone(),
             offset: sprite_offset,
         },
     )))

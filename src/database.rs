@@ -81,11 +81,17 @@ impl Database {
         cache[&texture_id].is_opaque(x, y)
     }
 
+    pub fn texture(&self, path: &str) -> &Texture2D {
+        self.textures
+            .get(path)
+            .unwrap_or_else(|| panic!("texture not loaded: {path}"))
+    }
+
     pub async fn load(&mut self) {
         self.register_textures().await;
-        self.register_tiles().await;
-        self.register_hairs().await;
-        self.register_races().await;
+        self.register_tiles();
+        self.register_hairs();
+        self.register_races();
         self.register_items();
         self.register_creatures();
     }
@@ -321,17 +327,7 @@ impl Database {
         }
     }
 
-    pub async fn register_races(&mut self) {
-        let female_texture = load_texture("./content/humans/body/female-body.png")
-            .await
-            .unwrap();
-        female_texture.set_filter(FilterMode::Nearest);
-
-        let male_texture = load_texture("./content/humans/body/male-body.png")
-            .await
-            .unwrap();
-        male_texture.set_filter(FilterMode::Nearest);
-
+    pub fn register_races(&mut self) {
         self.races.insert(
             String::from("human"),
             Race {
@@ -339,21 +335,20 @@ impl Database {
                 name: String::from("human"),
                 female_sprite: Sprite {
                     color: get_default_skin_color(),
-                    texture: female_texture,
+                    texture_path: "./content/humans/body/female-body.png".into(),
                     offset: vec2(0.0, 0.0),
                 },
                 male_sprite: Sprite {
                     color: get_default_skin_color(),
-                    texture: male_texture,
+                    texture_path: "./content/humans/body/male-body.png".into(),
                     offset: vec2(0.0, 0.0),
                 },
             },
         );
     }
 
-    pub async fn register_hairs(&mut self) {
+    pub fn register_hairs(&mut self) {
         self.hairs = human_layers(
-            &self.textures,
             &[
                 (
                     "Médio",
@@ -394,7 +389,6 @@ impl Database {
             ],
         );
         self.beards = human_layers(
-            &self.textures,
             &[
                 (
                     "Rala",
@@ -430,61 +424,42 @@ impl Database {
         );
     }
 
-    pub async fn register_tiles(&mut self) {
-        let grass_texture = load_texture("./content/vegetation/Grass.png")
-            .await
-            .unwrap();
-        grass_texture.set_filter(FilterMode::Nearest);
-
+    pub fn register_tiles(&mut self) {
         self.tiles.insert(
             1,
             TileDefinition {
                 name: "Grass".into(),
-                texture: grass_texture,
+                texture_path: "./content/vegetation/Grass.png",
                 solid: false,
             },
         );
-
-        let grass_object_texture = load_texture("./content/vegetation/grass-object.png")
-            .await
-            .unwrap();
-        grass_object_texture.set_filter(FilterMode::Nearest);
 
         self.tiles.insert(
             2,
             TileDefinition {
                 name: "Grass object".into(),
-                texture: grass_object_texture,
+                texture_path: "./content/vegetation/grass-object.png",
                 solid: false,
             },
         );
-
-        let dirt_texture = load_texture("./content/vegetation/Dirt.png").await.unwrap();
-        dirt_texture.set_filter(FilterMode::Nearest);
 
         self.tiles.insert(
             3,
             TileDefinition {
                 name: "Dirt".into(),
-                texture: dirt_texture,
+                texture_path: "./content/vegetation/dirt.png",
                 solid: true,
             },
         );
     }
 }
 
-fn human_layers(
-    textures: &HashMap<String, Texture2D>,
-    entries: &[(&'static str, &'static str, Vec2, Vec2)],
-) -> Vec<HumanLayer> {
+fn human_layers(entries: &[(&'static str, &'static str, Vec2, Vec2)]) -> Vec<HumanLayer> {
     entries
         .iter()
         .map(|(name, path, male_offset, female_offset)| HumanLayer {
             name,
-            texture: textures
-                .get(*path)
-                .unwrap_or_else(|| panic!("human customization texture not found: {path}"))
-                .clone(),
+            texture_path: path,
             male_offset: *male_offset,
             female_offset: *female_offset,
         })

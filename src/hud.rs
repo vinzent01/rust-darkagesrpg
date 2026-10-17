@@ -46,6 +46,10 @@ fn draw_round_rect(x: f32, y: f32, w: f32, h: f32, r: f32, color: Color) {
 }
 
 pub fn update_ui(world: &mut World, database: &Database) -> bool {
+    if player_inventory_entity(world).is_none() {
+        return false;
+    }
+
     handle_spawn_ui(world);
     update_inventory_ui(world, database);
     world.query::<&UIInventory>().iter().next().is_some()
@@ -162,8 +166,9 @@ fn slot_at_position(rect: Rect, scroll: usize, slot_count: usize, point: Vec2) -
 }
 
 pub fn draw_inventory_ui(world : &World, database : &Database){
-    let inventory_entity =
-        player_inventory_entity(world).expect("player inventory must be initialized");
+    let Some(inventory_entity) = player_inventory_entity(world) else {
+        return;
+    };
     let inventory = world
         .get::<&Inventory>(inventory_entity)
         .expect("player inventory disappeared");

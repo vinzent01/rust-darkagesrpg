@@ -7,10 +7,11 @@ pub type TileId = u16;
 
 pub const MAP_WIDTH: usize = 100;
 pub const MAP_HEIGHT: usize = 100;
+pub const MAP_CENTER_CELL: (i32, i32) = ((MAP_WIDTH / 2) as i32, (MAP_HEIGHT / 2) as i32);
 
 pub struct TileDefinition {
     pub name: String,
-    pub texture: Texture2D,
+    pub texture_path: &'static str,
     pub solid: bool,
 }
 

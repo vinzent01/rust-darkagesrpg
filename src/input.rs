@@ -98,6 +98,174 @@ pub fn attack_target_at_cursor_visible(
     })
 }
 
+fn entity_hit_bounds_at(
+    world: &World,
+    database: &Database,
+    entity: Entity,
+    position: &Position,
+    point: Vec2,
+) -> bool {
+    let mut bounds: Option<Rect> = None;
+    if let Ok(sprite) = world.get::<&Sprite>(entity) {
+        include_texture_bounds(
+            &mut bounds,
+            database.texture(&sprite.texture_path),
+            position.value + position.offset + sprite.offset,
+        );
+    }
+
+    let tree_overlay_hidden = world
+        .get::<&Tree>(entity)
+        .is_ok_and(|tree| tree.fall.is_some() || tree.felled);
+    if !tree_overlay_hidden {
+        if let Ok(overlay) = world.get::<&SpriteOverlay>(entity) {
+            include_texture_bounds(
+                &mut bounds,
+                database.texture(&overlay.sprite.texture_path),
+                position.value + position.offset + overlay.sprite.offset,
+            );
+        }
+    }
+
+    if let Ok(sprite) = world.get::<&OnOffSprite>(entity) {
+        let sprite = if sprite.is_on {
+            &sprite.on
+        } else {
+            &sprite.off
+        };
+        include_texture_bounds(
+            &mut bounds,
+            database.texture(&sprite.texture_path),
+            position.value + position.offset + sprite.offset,
+        );
+    }
+
+    if let Ok(appearance) = world.get::<&Appearence>(entity) {
+        let equipment = world
+            .get::<&Equipment>(entity)
+            .expect("character equipment disappeared");
+        include_appearance_bounds(&mut bounds, database, position, &appearance, &equipment);
+    }
+
+    bounds.is_some_and(|bounds| point_is_inside(bounds, point))
+}
+
+fn include_texture_bounds(bounds: &mut Option<Rect>, texture: &Texture2D, origin: Vec2) {
+    let texture_bounds = Rect::new(origin.x, origin.y, texture.width(), texture.height());
+    *bounds = Some(match *bounds {
+        Some(current) => {
+            let left = current.x.min(texture_bounds.x);
+            let top = current.y.min(texture_bounds.y);
+            let right = (current.x + current.w).max(texture_bounds.x + texture_bounds.w);
+            let bottom = (current.y + current.h).max(texture_bounds.y + texture_bounds.h);
+            Rect::new(left, top, right - left, bottom - top)
+        }
+        None => texture_bounds,
+    });
+}
+
+fn include_appearance_bounds(
+    bounds: &mut Option<Rect>,
+    database: &Database,
+    position: &Position,
+    appearance: &Appearence,
+    equipment: &Equipment,
+) {
+    let race = database
+        .races
+        .get(appearance.body.race)
+        .expect("character race not found");
+    let body = if appearance.body.genre {
+        &race.male_sprite
+    } else {
+        &race.female_sprite
+    };
+    let body_texture = database.texture(&body.texture_path);
+    let body_origin = position.value + position.offset;
+    include_texture_bounds(bounds, body_texture, body_origin);
+
+    for slot in [
+        EquipmentSlot::Legs,
+        EquipmentSlot::Torso,
+        EquipmentSlot::Feet,
+        EquipmentSlot::Head,
+        EquipmentSlot::OffHand,
+        EquipmentSlot::MainHand,
+    ] {
+        let Some(item_id) = equipment.items.get(&slot) else {
+            continue;
+        };
+        let item = database
+            .items
+            .get(item_id)
+            .expect("equipped item definition not found");
+        let Some(item_equipment) = &item.equipment else {
+            continue;
+        };
+        let texture_path = if appearance.body.genre {
+            &item_equipment.male_texture_path
+        } else {
+            &item_equipment.female_texture_path
+        };
+        let texture = database
+            .textures
+            .get(texture_path)
+            .expect("equipped item texture not found");
+        let offset_x = if appearance.is_flipped {
+            -item_equipment.offset.x
+        } else {
+            item_equipment.offset.x
+        };
+        let origin = if matches!(slot, EquipmentSlot::MainHand | EquipmentSlot::OffHand) {
+            let is_main_hand = slot == EquipmentSlot::MainHand;
+            let is_on_right = is_main_hand != appearance.is_flipped;
+            let item_x = if is_on_right {
+                body_origin.x + body_texture.width()
+            } else {
+                body_origin.x - texture.width()
+            };
+            vec2(item_x + offset_x, body_origin.y + item_equipment.offset.y)
+        } else {
+            body_origin + vec2(offset_x, item_equipment.offset.y)
+        };
+        include_texture_bounds(bounds, texture, origin);
+    }
+
+    if let Some(beard_id) = appearance.beard {
+        let beard = &database.beards[beard_id];
+        let offset = beard.offset_for(appearance.body.genre);
+        let texture = database.texture(beard.texture_path);
+        let origin = if appearance.is_flipped {
+            vec2(
+                body_origin.x + body_texture.width() - offset.x - texture.width(),
+                body_origin.y + offset.y,
+            )
+        } else {
+            body_origin + offset
+        };
+        include_texture_bounds(bounds, texture, origin);
+    }
+
+    if let Some(hair_id) = appearance.hair {
+        let hair = &database.hairs[hair_id];
+        let offset = hair.offset_for(appearance.body.genre);
+        let texture = database.texture(hair.texture_path);
+        let x = if appearance.is_flipped {
+            body_origin.x + body_texture.width() - offset.x - texture.width()
+        } else {
+            body_origin.x + offset.x
+        };
+        include_texture_bounds(bounds, texture, vec2(x, body_origin.y + offset.y));
+    }
+}
+
+fn point_is_inside(bounds: Rect, point: Vec2) -> bool {
+    point.x >= bounds.x
+        && point.y >= bounds.y
+        && point.x < bounds.x + bounds.w
+        && point.y < bounds.y + bounds.h
+}
+
 fn entity_hit_at(
     world: &World,
     database: &Database,
@@ -114,13 +282,17 @@ fn entity_hit_at(
         return false;
     }
 
+    if !entity_hit_bounds_at(world, database, entity, position, mouse_world) {
+        return false;
+    }
+
     let tree_overlay_hidden = world
         .get::<&Tree>(entity)
         .is_ok_and(|tree| tree.fall.is_some() || tree.felled);
     let sprite_hit = world.get::<&Sprite>(entity).is_ok_and(|sprite| {
         texture_hit_at(
             database,
-            &sprite.texture,
+            database.texture(&sprite.texture_path),
             position.value + position.offset + sprite.offset,
             mouse_world,
             false,
@@ -129,7 +301,7 @@ fn entity_hit_at(
         && world.get::<&SpriteOverlay>(entity).is_ok_and(|overlay| {
             texture_hit_at(
                 database,
-                &overlay.sprite.texture,
+                database.texture(&overlay.sprite.texture_path),
                 position.value + position.offset + overlay.sprite.offset,
                 mouse_world,
                 false,
@@ -143,7 +315,7 @@ fn entity_hit_at(
             };
             texture_hit_at(
                 database,
-                &sprite.texture,
+                database.texture(&sprite.texture_path),
                 position.value + position.offset + sprite.offset,
                 mouse_world,
                 false,
@@ -195,10 +367,11 @@ fn appearance_hit_at(
     } else {
         &race.female_sprite
     };
+    let body_texture = database.texture(&body.texture_path);
     let body_origin = position.value + position.offset;
     if texture_hit_at(
         database,
-        &body.texture,
+        body_texture,
         body_origin,
         point,
         appearance.is_flipped,
@@ -242,7 +415,7 @@ fn appearance_hit_at(
             let is_main_hand = slot == EquipmentSlot::MainHand;
             let is_on_right = is_main_hand != appearance.is_flipped;
             let item_x = if is_on_right {
-                body_origin.x + body.texture.width()
+                body_origin.x + body_texture.width()
             } else {
                 body_origin.x - texture.width()
             };
@@ -260,7 +433,9 @@ fn appearance_hit_at(
         let offset = beard.offset_for(appearance.body.genre);
         let origin = if appearance.is_flipped {
             vec2(
-                body_origin.x + body.texture.width() - offset.x - beard.texture.width(),
+                body_origin.x + body_texture.width()
+                    - offset.x
+                    - database.texture(beard.texture_path).width(),
                 body_origin.y + offset.y,
             )
         } else {
@@ -268,7 +443,7 @@ fn appearance_hit_at(
         };
         if texture_hit_at(
             database,
-            &beard.texture,
+            database.texture(beard.texture_path),
             origin,
             point,
             appearance.is_flipped,
@@ -281,13 +456,15 @@ fn appearance_hit_at(
         let hair = &database.hairs[hair_id];
         let offset = hair.offset_for(appearance.body.genre);
         let hair_x = if appearance.is_flipped {
-            body_origin.x + body.texture.width() - offset.x - hair.texture.width()
+            body_origin.x + body_texture.width()
+                - offset.x
+                - database.texture(hair.texture_path).width()
         } else {
             body_origin.x + offset.x
         };
         if texture_hit_at(
             database,
-            &hair.texture,
+            database.texture(hair.texture_path),
             vec2(hair_x, body_origin.y + offset.y),
             point,
             appearance.is_flipped,
@@ -363,5 +540,21 @@ pub fn camera_zoom(camera: &mut Camera2D, zoom: &mut f32, dt: f32) {
         *zoom = zoom.clamp(0.5, 8.0);
 
         camera.zoom = vec2(*zoom / screen_width(), *zoom / screen_height());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::point_is_inside;
+    use macroquad::math::{Rect, vec2};
+
+    #[test]
+    fn coarse_hit_bounds_include_left_and_top_but_exclude_right_and_bottom_edges() {
+        let bounds = Rect::new(10.0, 20.0, 30.0, 40.0);
+
+        assert!(point_is_inside(bounds, vec2(10.0, 20.0)));
+        assert!(point_is_inside(bounds, vec2(39.999, 59.999)));
+        assert!(!point_is_inside(bounds, vec2(40.0, 30.0)));
+        assert!(!point_is_inside(bounds, vec2(20.0, 60.0)));
     }
 }

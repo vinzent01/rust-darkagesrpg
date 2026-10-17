@@ -1,9 +1,9 @@
-use macroquad::{color::Color, math::Vec2, texture::Texture2D};
+use macroquad::{color::Color, math::Vec2};
 
 #[derive(Clone)]
 pub struct Sprite{
     pub color: Color,
-    pub texture : Texture2D,
+    pub texture_path: String,
     pub offset : Vec2
 }
 
@@ -11,11 +11,13 @@ pub struct SpriteOverlay {
     pub sprite: Sprite,
 }
 
+#[derive(Clone)]
 pub struct Body {
     pub race : raceId,
     pub genre : bool
 }
 
+#[derive(Clone)]
 pub struct Appearence {
     pub is_flipped : bool,
     pub body: Body,
@@ -27,7 +29,7 @@ pub struct Appearence {
 
 pub struct HumanLayer {
     pub name: &'static str,
-    pub texture: Texture2D,
+    pub texture_path: &'static str,
     pub male_offset: Vec2,
     pub female_offset: Vec2,
 }

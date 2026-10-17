@@ -13,6 +13,7 @@ use crate::movement;
 use crate::objects::{self, GameSounds};
 use crate::render;
 use crate::spawner;
+use crate::tilemap::MAP_CENTER_CELL;
 use crate::utils;
 
 mod scene;
@@ -96,6 +97,7 @@ pub fn draw_world(
     camera: &Camera2D,
     outline_material: &Material,
     show_sprite_hitboxes: bool,
+    render_cache: &mut render::EntityRenderCache,
 ) {
     clear_background(BLACK);
     render::draw_tilemap(world, database, camera);
@@ -105,6 +107,7 @@ pub fn draw_world(
         camera,
         outline_material,
         show_sprite_hitboxes,
+        render_cache,
     );
     inventory::draw_ground_items(world, database);
 }
@@ -133,7 +136,7 @@ pub fn resize_camera(camera: &mut Camera2D, zoom: f32) {
 
 pub fn create_camera(zoom: f32) -> Camera2D {
     Camera2D {
-        target: vec2(0.0, 0.0),
+        target: utils::cell_to_world(MAP_CENTER_CELL.0, MAP_CENTER_CELL.1),
         zoom: vec2(zoom / screen_width(), zoom / screen_height()),
         ..Default::default()
     }
